@@ -1,0 +1,6 @@
+{
+  "name": "Family Wall",
+  "description": "Organizador familiar completo con calendario compartido, lista de la compra con ofertas y supermercados, tareas por miembro, planning de comidas y recetario.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
