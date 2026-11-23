@@ -1,14 +1,13 @@
 package com.example.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 
 private val DarkColorScheme = darkColorScheme(
     primary = FamilyDarkPrimary,
@@ -17,9 +16,16 @@ private val DarkColorScheme = darkColorScheme(
     onPrimaryContainer = FamilyDarkOnPrimaryContainer,
     secondary = FamilyDarkSecondary,
     onSecondary = FamilyDarkOnSecondary,
+    secondaryContainer = FamilyDarkSecondaryContainer,
+    onSecondaryContainer = FamilyDarkOnSecondaryContainer,
     background = FamilyDarkBackground,
+    onBackground = FamilyDarkOnBackground,
     surface = FamilyDarkSurface,
-    onSurface = FamilyDarkOnSurface
+    onSurface = FamilyDarkOnSurface,
+    surfaceVariant = FamilyDarkSurfaceVariant,
+    onSurfaceVariant = FamilyDarkOnSurfaceVariant,
+    outline = FamilyDarkOutline,
+    outlineVariant = FamilyDarkOutlineVariant
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -40,27 +46,36 @@ private val LightColorScheme = lightColorScheme(
     surface = FamilySurface,
     onSurface = FamilyOnSurface,
     surfaceVariant = FamilySurfaceVariant,
-    onSurfaceVariant = FamilyOnSurfaceVariant
+    onSurfaceVariant = FamilyOnSurfaceVariant,
+    surfaceContainerLow = FamilySurfaceContainerLow,
+    surfaceContainer = FamilySurfaceContainer,
+    outline = FamilyOutline,
+    outlineVariant = FamilyOutlineVariant,
+    error = FamilyError,
+    onError = FamilyOnError,
+    errorContainer = FamilyErrorContainer,
+    onErrorContainer = FamilyOnErrorContainer
+)
+
+val FamilyShapes = Shapes(
+    extraSmall = RoundedCornerShape(6.dp),
+    small = RoundedCornerShape(10.dp),
+    medium = RoundedCornerShape(14.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(26.dp)
 )
 
 @Composable
 fun FamilyWallTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Keep cohesive custom family branding
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
+    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        shapes = FamilyShapes,
         content = content
     )
 }

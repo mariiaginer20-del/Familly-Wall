@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,22 +25,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AddShoppingCart
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ViewAgenda
-import androidx.compose.material.icons.filled.ViewWeek
+import androidx.compose.material.icons.outlined.AddShoppingCart
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.ViewAgenda
+import androidx.compose.material.icons.outlined.ViewWeek
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -46,9 +46,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -64,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,9 +74,10 @@ import com.example.data.model.MealType
 import com.example.data.model.Supermarket
 import com.example.ui.FamilyWallViewModel
 import com.example.ui.dialogs.AddRecipeDialog
+import com.example.ui.theme.FamilySecondary
 import java.util.Calendar
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MealsScreen(
     viewModel: FamilyWallViewModel,
@@ -93,16 +94,13 @@ fun MealsScreen(
         if (dow == Calendar.SUNDAY) 6 else dow - 2
     }
 
-    // Planner view mode: true = full weekly overview, false = single day focus
     var showFullWeekView by remember { mutableStateOf(true) }
     var selectedDayIndex by remember { mutableIntStateOf(todayMondayBased) }
 
-    // State for editing meal slot (dayIndex, mealType)
     var editingSlot by remember { mutableStateOf<Pair<Int, MealType>?>(null) }
     var editingDishName by remember { mutableStateOf("") }
     var editingLinkedRecipeId by remember { mutableStateOf<Long?>(null) }
 
-    // Recipe Book states
     var recipeSearchQuery by remember { mutableStateOf("") }
     var selectedRecipeFilter by remember { mutableStateOf("Todas") }
     var selectedRecipeForDetails by remember { mutableStateOf<RecipeEntity?>(null) }
@@ -112,14 +110,14 @@ fun MealsScreen(
     var feedbackMessage by remember { mutableStateOf<String?>(null) }
 
     val recipeCategories = remember(recipes) {
-        listOf("Todas", "⭐ Favoritas") + recipes.map { it.category }.distinct().sorted()
+        listOf("Todas", "Favoritas") + recipes.map { it.category }.distinct().sorted()
     }
 
     val filteredRecipes = remember(recipes, recipeSearchQuery, selectedRecipeFilter) {
         recipes.filter { r ->
             val matchesFilter = when (selectedRecipeFilter) {
                 "Todas" -> true
-                "⭐ Favoritas" -> r.isFavorite
+                "Favoritas" -> r.isFavorite
                 else -> r.category.equals(selectedRecipeFilter, ignoreCase = true)
             }
             val matchesQuery = recipeSearchQuery.isBlank() ||
@@ -129,37 +127,39 @@ fun MealsScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 20.dp)
         ) {
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Screen Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "🍲 Comidas & Recetario",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                    Text(
-                        text = "Planning semanal completo y recetario familiar",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            Column {
+                Text(
+                    text = "COCINA Y DESPENSA",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 1.2.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (selectedSubTab == 0) "Planning semanal" else "Recetario familiar",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
             }
 
             if (feedbackMessage != null) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Surface(
-                    shape = RoundedCornerShape(10.dp),
+                    shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -189,102 +189,137 @@ fun MealsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Sub Tab Row: Planning Semanal vs Recetario
-            SecondaryTabRow(
-                selectedTabIndex = selectedSubTab,
+            // Editorial Segmented Switcher: Planning vs Recetario
+            Surface(
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Tab(
-                    selected = selectedSubTab == 0,
-                    onClick = { selectedSubTab = 0 },
-                    text = { Text("📅 Planning de Comidas", fontWeight = FontWeight.Bold, fontSize = 13.sp) },
-                    modifier = Modifier.testTag("tab_weekly_planner")
-                )
-                Tab(
-                    selected = selectedSubTab == 1,
-                    onClick = { selectedSubTab = 1 },
-                    text = { Text("📖 Recetario (${recipes.size})", fontWeight = FontWeight.Bold, fontSize = 13.sp) },
-                    modifier = Modifier.testTag("tab_recipes")
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    val isPlan = selectedSubTab == 0
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isPlan) MaterialTheme.colorScheme.surface else Color.Transparent,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { selectedSubTab = 0 }
+                            .testTag("tab_weekly_planner")
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(vertical = 9.dp)
+                        ) {
+                            Text(
+                                text = "Planning semanal",
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontWeight = if (isPlan) FontWeight.Bold else FontWeight.Medium
+                                ),
+                                color = if (isPlan) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (!isPlan) MaterialTheme.colorScheme.surface else Color.Transparent,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { selectedSubTab = 1 }
+                            .testTag("tab_recipes")
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(vertical = 9.dp)
+                        ) {
+                            Text(
+                                text = "Recetario (${recipes.size})",
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontWeight = if (!isPlan) FontWeight.Bold else FontWeight.Medium
+                                ),
+                                color = if (!isPlan) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             if (selectedSubTab == 0) {
                 // PLANNING DE COMIDAS
-                // View Mode Toggle: Menú Semanal Completo vs Por Día
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (showFullWeekView) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (showFullWeekView) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                        border = if (showFullWeekView) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(20.dp))
                             .clickable { showFullWeekView = true }
                             .testTag("planner_mode_week")
                     ) {
                         Row(
-                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
-                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                Icons.Default.ViewWeek,
+                                Icons.Outlined.ViewWeek,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = if (showFullWeekView) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                modifier = Modifier.size(15.dp),
+                                tint = if (showFullWeekView) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "Semana completa",
-                                fontSize = 12.sp,
-                                fontWeight = if (showFullWeekView) FontWeight.Bold else FontWeight.Medium,
-                                color = if (showFullWeekView) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (showFullWeekView) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
 
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (!showFullWeekView) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (!showFullWeekView) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                        border = if (!showFullWeekView) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(20.dp))
                             .clickable { showFullWeekView = false }
                             .testTag("planner_mode_day")
                     ) {
                         Row(
-                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 10.dp),
-                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                Icons.Default.ViewAgenda,
+                                Icons.Outlined.ViewAgenda,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                                tint = if (!showFullWeekView) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                modifier = Modifier.size(15.dp),
+                                tint = if (!showFullWeekView) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = "Por día",
-                                fontSize = 12.sp,
-                                fontWeight = if (!showFullWeekView) FontWeight.Bold else FontWeight.Medium,
-                                color = if (!showFullWeekView) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (!showFullWeekView) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 if (showFullWeekView) {
-                    // FULL WEEKLY MENU VIEW (Lunes - Domingo)
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -310,28 +345,29 @@ fun MealsScreen(
                         }
                     }
                 } else {
-                    // SINGLE DAY DETAIL VIEW
                     LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         items(daysOfWeek.indices.toList()) { index ->
                             val isSelected = selectedDayIndex == index
                             val isToday = index == todayMondayBased
                             Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(20.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                                border = if (isSelected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(20.dp))
                                     .clickable { selectedDayIndex = index }
                                     .testTag("planner_day_$index")
                             ) {
                                 Text(
-                                    text = if (isToday) "${daysOfWeek[index]} (Hoy)" else daysOfWeek[index],
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                    text = if (isToday) "${daysOfWeek[index]} · Hoy" else daysOfWeek[index],
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    ),
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                                 )
                             }
                         }
@@ -350,7 +386,8 @@ fun MealsScreen(
                         item {
                             Text(
                                 text = "Menú del ${daysOfWeek[selectedDayIndex]}",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onBackground
                             )
                         }
 
@@ -388,9 +425,9 @@ fun MealsScreen(
                 OutlinedTextField(
                     value = recipeSearchQuery,
                     onValueChange = { recipeSearchQuery = it },
-                    placeholder = { Text("Buscar receta o ingrediente...") },
+                    placeholder = { Text("Buscar receta o ingrediente...", style = MaterialTheme.typography.bodyMedium) },
                     leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = null)
+                        Icon(Icons.Outlined.Search, contentDescription = null)
                     },
                     trailingIcon = {
                         if (recipeSearchQuery.isNotBlank()) {
@@ -400,12 +437,18 @@ fun MealsScreen(
                         }
                     },
                     singleLine = true,
+                    shape = MaterialTheme.shapes.small,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("recipe_search_input")
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -414,25 +457,26 @@ fun MealsScreen(
                     items(recipeCategories) { cat ->
                         val isSelected = selectedRecipeFilter == cat
                         Surface(
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(18.dp),
                             color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(RoundedCornerShape(18.dp))
                                 .clickable { selectedRecipeFilter = cat }
                                 .testTag("recipe_filter_$cat")
                         ) {
                             Text(
                                 text = cat,
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                ),
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 if (filteredRecipes.isEmpty()) {
                     Box(
@@ -441,20 +485,28 @@ fun MealsScreen(
                             .weight(1f),
                         contentAlignment = Alignment.Center
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("📖", fontSize = 48.sp)
-                            Spacer(modifier = Modifier.height(10.dp))
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(horizontal = 32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.MenuBook,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.size(44.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
                             Text(
                                 text = if (recipes.isEmpty()) "Aún no hay recetas guardadas" else "No hay recetas con ese filtro",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Pulsa + para guardar recetas familiares con ingredientes, pasos y pasarlas a la compra.",
+                                text = "Guarda tus recetas familiares con ingredientes, pasos y añádelas a la compra.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 32.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -474,19 +526,20 @@ fun MealsScreen(
                             )
                         }
                         item {
-                            Spacer(modifier = Modifier.height(80.dp))
+                            Spacer(modifier = Modifier.height(84.dp))
                         }
                     }
                 }
             }
         }
 
-        // FAB for New Recipe (when on Recipe tab)
         if (selectedSubTab == 1) {
             ExtendedFloatingActionButton(
                 onClick = { viewModel.setShowAddRecipeDialog(true) },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("Nueva Receta") },
+                text = { Text("Nueva receta", style = MaterialTheme.typography.labelLarge) },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(20.dp)
@@ -495,13 +548,13 @@ fun MealsScreen(
         }
     }
 
-    // Dialog: Edit / Assign Meal Slot (with quick-pick from Recetario)
+    // Dialog: Edit / Assign Meal Slot
     if (editingSlot != null) {
         val (dayIdx, mType) = editingSlot!!
         AlertDialog(
             onDismissRequest = { editingSlot = null },
             title = {
-                Text("${mType.emoji} ${mType.displayName} · ${daysOfWeek[dayIdx]}")
+                Text("${mType.displayName} · ${daysOfWeek[dayIdx]}", style = MaterialTheme.typography.titleLarge)
             },
             text = {
                 Column(
@@ -515,7 +568,7 @@ fun MealsScreen(
                             editingDishName = it
                             editingLinkedRecipeId = null
                         },
-                        label = { Text("Plato / Menú") },
+                        label = { Text("Plato o menú") },
                         placeholder = { Text("ej: Tostadas, Lentejas, Salmón...") },
                         singleLine = true,
                         trailingIcon = {
@@ -536,8 +589,8 @@ fun MealsScreen(
                     if (recipes.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = "O elige una receta del Recetario:",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            text = "Elegir del recetario:",
+                            style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -559,8 +612,7 @@ fun MealsScreen(
                                 ) {
                                     Text(
                                         text = "${recipe.emoji} ${recipe.title}",
-                                        fontSize = 12.sp,
-                                        fontWeight = if (isPicked) FontWeight.Bold else FontWeight.Normal,
+                                        style = MaterialTheme.typography.labelMedium,
                                         color = if (isPicked) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                     )
@@ -575,7 +627,7 @@ fun MealsScreen(
                     onClick = {
                         viewModel.updateMealPlanSlot(dayIdx, mType, editingDishName, editingLinkedRecipeId)
                         feedbackMessage = if (editingDishName.isBlank()) {
-                            "Hueco de ${mType.displayName} (${daysOfWeek[dayIdx]}) vaciado"
+                            "${mType.displayName} (${daysOfWeek[dayIdx]}) vaciado"
                         } else {
                             "${mType.displayName} del ${daysOfWeek[dayIdx]}: $editingDishName"
                         }
@@ -583,7 +635,7 @@ fun MealsScreen(
                     },
                     modifier = Modifier.testTag("save_meal_button")
                 ) {
-                    Text(if (editingDishName.isBlank()) "Vaciar" else "Guardar Plato")
+                    Text(if (editingDishName.isBlank()) "Vaciar" else "Guardar")
                 }
             },
             dismissButton = {
@@ -594,7 +646,7 @@ fun MealsScreen(
         )
     }
 
-    // Dialog: Recipe Details with selective ingredient checklist, edit/delete, plan assign & transfer
+    // Dialog: Recipe Details
     if (selectedRecipeForDetails != null) {
         val r = selectedRecipeForDetails!!
         val ingredientLines = remember(r.id, r.ingredients) {
@@ -619,7 +671,7 @@ fun MealsScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = r.title,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            style = MaterialTheme.typography.titleLarge
                         )
                     }
                     Row {
@@ -631,7 +683,7 @@ fun MealsScreen(
                             },
                             modifier = Modifier.size(34.dp)
                         ) {
-                            Icon(Icons.Default.Edit, contentDescription = "Editar receta", modifier = Modifier.size(18.dp))
+                            Icon(Icons.Outlined.Edit, contentDescription = "Editar receta", modifier = Modifier.size(18.dp))
                         }
                         IconButton(
                             onClick = {
@@ -642,7 +694,7 @@ fun MealsScreen(
                             modifier = Modifier.size(34.dp)
                         ) {
                             Icon(
-                                Icons.Default.Delete,
+                                Icons.Outlined.Delete,
                                 contentDescription = "Eliminar receta",
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(18.dp)
@@ -657,43 +709,18 @@ fun MealsScreen(
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState())
                 ) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-                            Text(
-                                text = "⏱️ ${r.prepTimeMinutes} min",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-                            Text(
-                                text = "👥 ${r.servings} personas",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                        Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                            Text(
-                                text = r.category,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
+                    Text(
+                        text = "${r.prepTimeMinutes} min · ${r.servings} personas · ${r.category}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
 
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
-                        text = "🛒 Ingredientes (marca los que te faltan):",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                        text = "Ingredientes (marca los que faltan)",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(6.dp))
 
@@ -740,14 +767,15 @@ fun MealsScreen(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
-                        text = "👨‍🍳 Pasos de preparación:",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                        text = "Pasos de preparación",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = r.instructions.ifBlank { "Sin pasos de preparación." },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -760,9 +788,9 @@ fun MealsScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("📅 Asignar al Planning Semanal")
+                        Text("Asignar al planning semanal")
                     }
                 }
             },
@@ -777,9 +805,9 @@ fun MealsScreen(
                     enabled = chosenList.isNotEmpty(),
                     modifier = Modifier.testTag("recipe_detail_add_to_shopping_btn")
                 ) {
-                    Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Outlined.AddShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Añadir (${chosenList.size}) a Compra")
+                    Text("Añadir (${chosenList.size}) a compra")
                 }
             },
             dismissButton = {
@@ -790,7 +818,6 @@ fun MealsScreen(
         )
     }
 
-    // Dialog: Edit existing recipe
     if (recipeToEdit != null) {
         val editing = recipeToEdit!!
         AddRecipeDialog(
@@ -814,7 +841,6 @@ fun MealsScreen(
         )
     }
 
-    // Dialog: Assign recipe directly to a day & meal slot in weekly planner
     if (recipeToAssignToPlan != null) {
         val r = recipeToAssignToPlan!!
         var targetDayIdx by remember { mutableIntStateOf(todayMondayBased) }
@@ -822,13 +848,10 @@ fun MealsScreen(
 
         AlertDialog(
             onDismissRequest = { recipeToAssignToPlan = null },
-            title = { Text("📅 Añadir '${r.title}' al Planning") },
+            title = { Text("Asignar '${r.title}'", style = MaterialTheme.typography.titleLarge) },
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "Día de la semana:",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                    )
+                    Text("Día de la semana", style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.height(6.dp))
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -845,9 +868,8 @@ fun MealsScreen(
                             ) {
                                 Text(
                                     text = name,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                 )
                             }
@@ -855,10 +877,7 @@ fun MealsScreen(
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Comida:",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
-                    )
+                    Text("Comida", style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.height(6.dp))
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -874,10 +893,9 @@ fun MealsScreen(
                                     .clickable { targetMealType = mType }
                             ) {
                                 Text(
-                                    text = "${mType.emoji} ${mType.displayName}",
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    text = mType.displayName,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                 )
                             }
@@ -889,7 +907,7 @@ fun MealsScreen(
                 Button(
                     onClick = {
                         viewModel.updateMealPlanSlot(targetDayIdx, targetMealType, r.title, r.id)
-                        feedbackMessage = "📅 '${r.title}' añadido al ${daysOfWeek[targetDayIdx]} (${targetMealType.displayName})"
+                        feedbackMessage = "'${r.title}' añadido al ${daysOfWeek[targetDayIdx]} (${targetMealType.displayName})"
                         recipeToAssignToPlan = null
                     }
                 ) {
@@ -904,21 +922,18 @@ fun MealsScreen(
         )
     }
 
-    // Dialog: Transfer Ingredients to Shopping List with Supermarket Picker
     if (recipeToTransfer != null) {
         val (r, chosenIngredients) = recipeToTransfer!!
         var chosenSupermarket by remember { mutableStateOf(Supermarket.MERCADONA) }
 
         AlertDialog(
             onDismissRequest = { recipeToTransfer = null },
-            title = {
-                Text("🛒 Pasar ingredientes a la compra")
-            },
+            title = { Text("Pasar ingredientes a la compra", style = MaterialTheme.typography.titleLarge) },
             text = {
                 Column {
                     val countLabel = chosenIngredients?.size?.toString() ?: "todos los"
                     Text(
-                        text = "¿A qué supermercado deseas añadir $countLabel ingredientes de '${r.title}'?",
+                        text = "¿En qué supermercado quieres añadir $countLabel ingredientes de '${r.title}'?",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -935,14 +950,14 @@ fun MealsScreen(
                                 .clickable { chosenSupermarket = smkt }
                         ) {
                             Row(
-                                modifier = Modifier.padding(10.dp),
+                                modifier = Modifier.padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(smkt.emoji, fontSize = 16.sp)
-                                Spacer(modifier = Modifier.width(10.dp))
                                 Text(
                                     text = smkt.displayName,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    ),
                                     color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                                 )
                             }
@@ -954,7 +969,7 @@ fun MealsScreen(
                 Button(
                     onClick = {
                         viewModel.addRecipeIngredientsToShopping(r, chosenSupermarket, chosenIngredients)
-                        feedbackMessage = "🛒 Ingredientes de '${r.title}' añadidos a ${chosenSupermarket.displayName}"
+                        feedbackMessage = "Ingredientes de '${r.title}' añadidos a ${chosenSupermarket.displayName}"
                         recipeToTransfer = null
                     },
                     modifier = Modifier.testTag("confirm_transfer_ingredients_btn")
@@ -978,15 +993,16 @@ fun WeeklyDayCard(
     dayMeals: List<MealPlanEntity>,
     onSlotClick: (MealType, String, Long?) -> Unit
 ) {
-    Card(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isToday) 4.dp else 1.dp)
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            width = if (isToday) 1.5.dp else 1.dp,
+            color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -995,21 +1011,18 @@ fun WeeklyDayCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = dayName,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
+                        style = MaterialTheme.typography.titleLarge,
+                        color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     )
                     if (isToday) {
                         Spacer(modifier = Modifier.width(8.dp))
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
+                            shape = RoundedCornerShape(5.dp),
                             color = MaterialTheme.colorScheme.primaryContainer
                         ) {
                             Text(
                                 text = "HOY",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
@@ -1019,17 +1032,16 @@ fun WeeklyDayCard(
 
                 val plannedCount = dayMeals.count { it.dishName.isNotBlank() }
                 Text(
-                    text = "$plannedCount/${MealType.entries.size} comidas",
-                    style = MaterialTheme.typography.labelSmall,
+                    text = "$plannedCount / ${MealType.entries.size}",
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
 
-            MealType.entries.forEach { mType ->
+            MealType.entries.forEachIndexed { idx, mType ->
                 val slot = dayMeals.firstOrNull { it.mealType == mType.name }
                 val dish = slot?.dishName?.takeIf { it.isNotBlank() }
                 Row(
@@ -1037,28 +1049,19 @@ fun WeeklyDayCard(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { onSlotClick(mType, dish ?: "", slot?.recipeId) }
-                        .padding(vertical = 6.dp, horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .padding(vertical = 9.dp, horizontal = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.width(106.dp)
-                    ) {
-                        Text(text = mType.emoji, fontSize = 14.sp)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = mType.displayName,
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                    Text(
+                        text = mType.displayName,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.width(88.dp)
+                    )
 
                     Text(
-                        text = dish ?: "+ Añadir ${mType.displayName.lowercase()}",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontWeight = if (dish != null) FontWeight.Medium else FontWeight.Normal
-                        ),
+                        text = dish ?: "Añadir ${mType.displayName.lowercase()}",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = if (dish != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -1066,11 +1069,14 @@ fun WeeklyDayCard(
                     )
 
                     Icon(
-                        imageVector = Icons.Default.Edit,
+                        imageVector = Icons.Outlined.Edit,
                         contentDescription = "Editar ${mType.displayName}",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         modifier = Modifier.size(15.dp)
                     )
+                }
+                if (idx < MealType.entries.lastIndex) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
                 }
             }
         }
@@ -1085,80 +1091,62 @@ fun MealSlotCard(
     onEdit: () -> Unit,
     onOpenRecipe: () -> Unit = {}
 ) {
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onEdit),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.size(42.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(text = mealType.emoji, fontSize = 20.sp)
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Column {
-                    Text(
-                        text = mealType.displayName,
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = dishName,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = if (dishName != "Sin planificar") FontWeight.SemiBold else FontWeight.Normal
-                        ),
-                        color = if (dishName != "Sin planificar") MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (hasLinkedRecipe) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .clickable(onClick = onOpenRecipe)
-                        ) {
-                            Text(
-                                text = "📖 Ver receta",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = mealType.displayName.uppercase(),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 1.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = dishName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (dishName != "Sin planificar") MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (hasLinkedRecipe) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(onClick = onOpenRecipe)
+                    ) {
+                        Text(
+                            text = "Ver receta",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
                     }
                 }
             }
 
             IconButton(onClick = onEdit) {
                 Icon(
-                    imageVector = Icons.Default.Edit,
+                    imageVector = Icons.Outlined.Edit,
                     contentDescription = "Editar plato",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -1176,55 +1164,48 @@ fun RecipeCard(
         recipe.ingredients.split("\n", ",").map { it.trim() }.count { it.isNotBlank() }
     }
 
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
             .clickable(onClick = onOpen)
             .testTag("recipe_card_${recipe.id}"),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = recipe.emoji, fontSize = 24.sp)
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = recipe.title,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-                        Text(
-                            text = "${recipe.category} · $ingredientCount ingredientes",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = recipe.category.uppercase(),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            letterSpacing = 1.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "${recipe.emoji} ${recipe.title}",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
 
-                IconButton(onClick = onToggleFavorite) {
+                IconButton(
+                    onClick = onToggleFavorite,
+                    modifier = Modifier.size(36.dp)
+                ) {
                     Icon(
-                        imageVector = if (recipe.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        imageVector = if (recipe.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                         contentDescription = "Favorita",
-                        tint = if (recipe.isFavorite) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (recipe.isFavorite) FamilySecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
@@ -1236,51 +1217,29 @@ fun RecipeCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                        Text(
-                            text = "⏱️ ${recipe.prepTimeMinutes} min",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                    Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                        Text(
-                            text = "👥 ${recipe.servings} pers.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
+                Text(
+                    text = "${recipe.prepTimeMinutes} min · ${recipe.servings} pers. · $ingredientCount ing.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
+                OutlinedButton(
+                    onClick = onAddToShopping,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable(onClick = onAddToShopping)
-                        .testTag("recipe_quick_add_shopping_${recipe.id}")
+                        .height(34.dp)
+                        .testTag("recipe_quick_add_shopping_${recipe.id}"),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AddShoppingCart,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "+ a la Compra",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Outlined.AddShoppingCart,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "A la compra",
+                        style = MaterialTheme.typography.labelMedium
+                    )
                 }
             }
         }

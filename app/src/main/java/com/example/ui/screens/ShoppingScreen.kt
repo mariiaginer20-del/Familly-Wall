@@ -1,11 +1,14 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,23 +25,22 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.LocalOffer
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,10 +64,14 @@ import com.example.ui.theme.ColorAlcampo
 import com.example.ui.theme.ColorCarrefour
 import com.example.ui.theme.ColorLidl
 import com.example.ui.theme.ColorMercadona
+import com.example.ui.theme.ColorOtherSupermarket
+import com.example.ui.theme.OfferBadgeBg
 import com.example.ui.theme.OfferBadgeColor
 import com.example.ui.theme.PriorityClub
-import com.example.ui.theme.PriorityNormal
+import com.example.ui.theme.PriorityClubBg
 import com.example.ui.theme.PriorityUrgente
+import com.example.ui.theme.PriorityUrgenteBg
+import com.example.ui.theme.SuccessGreen
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -81,29 +88,37 @@ fun ShoppingScreen(
     val pendingCount = allItems.count { !it.isChecked }
     val completedCount = allItems.count { it.isChecked }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 20.dp)
         ) {
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Title & Action Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Bottom
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "🛒 Lista de la Compra",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                        text = "$pendingCount PENDIENTES · $completedCount EN CARRO",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            letterSpacing = 1.2.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.secondary
                     )
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "$pendingCount pendientes · $completedCount comprados",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "Lista de la compra",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
 
@@ -111,34 +126,38 @@ fun ShoppingScreen(
                     OutlinedButton(
                         onClick = { viewModel.clearCheckedShoppingItems() },
                         modifier = Modifier.height(34.dp),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                     ) {
                         Icon(
-                            Icons.Default.DeleteSweep,
+                            Icons.Outlined.DeleteSweep,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(15.dp),
                             tint = MaterialTheme.colorScheme.error
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = "Limpiar ($completedCount)",
-                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.error
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Search Bar
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.setShoppingSearchQuery(it) },
-                placeholder = { Text("Buscar alimento o producto...") },
+                placeholder = {
+                    Text(
+                        "Buscar producto o categoría...",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
                 leadingIcon = {
                     Icon(
-                        Icons.Default.Search,
+                        Icons.Outlined.Search,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -151,12 +170,18 @@ fun ShoppingScreen(
                     }
                 },
                 singleLine = true,
+                shape = MaterialTheme.shapes.small,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("shopping_search_input")
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Supermarket Filter Chips
             LazyRow(
@@ -166,7 +191,6 @@ fun ShoppingScreen(
                 item {
                     SupermarketFilterChip(
                         name = "Todos",
-                        emoji = "🏪",
                         isSelected = selectedSupermarket == "Todos",
                         onClick = { viewModel.setSupermarketFilter("Todos") },
                         color = MaterialTheme.colorScheme.primary
@@ -178,11 +202,10 @@ fun ShoppingScreen(
                         Supermarket.CARREFOUR -> ColorCarrefour
                         Supermarket.LIDL -> ColorLidl
                         Supermarket.ALCAMPO -> ColorAlcampo
-                        Supermarket.OTRO -> Color(0xFF64748B)
+                        Supermarket.OTRO -> ColorOtherSupermarket
                     }
                     SupermarketFilterChip(
                         name = smkt.displayName,
-                        emoji = smkt.emoji,
                         isSelected = selectedSupermarket.equals(smkt.displayName, ignoreCase = true),
                         onClick = { viewModel.setSupermarketFilter(smkt.displayName) },
                         color = color
@@ -201,7 +224,7 @@ fun ShoppingScreen(
                     "Club" to PriorityClub,
                     "Ofertas" to OfferBadgeColor,
                     "Pendientes" to secondaryColor,
-                    "Comprados" to Color(0xFF10B981)
+                    "Comprados" to SuccessGreen
                 )
             }
 
@@ -213,32 +236,27 @@ fun ShoppingScreen(
                 items(priorityFilters) { (filterName, color) ->
                     val isSelected = selectedPriority == filterName
                     Surface(
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(18.dp),
                         color = if (isSelected) color else MaterialTheme.colorScheme.surfaceVariant,
                         modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(RoundedCornerShape(18.dp))
                             .clickable { viewModel.setShoppingPriorityFilter(filterName) }
                             .testTag("priority_filter_$filterName")
                     ) {
                         Text(
-                            text = when (filterName) {
-                                "Urgente" -> "⚡ Urgente"
-                                "Club" -> "⭐ Club"
-                                "Ofertas" -> "🏷️ Ofertas"
-                                else -> filterName
-                            },
-                            fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            text = filterName,
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            ),
                             color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Items List
             if (items.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -246,20 +264,28 @@ fun ShoppingScreen(
                         .weight(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("🛒", fontSize = 48.sp)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = 32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.ShoppingBag,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(44.dp)
+                        )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = "Lista vacía con estos filtros",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onBackground
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Añade alimentos eligiendo supermercado, cantidades y si es Urgente o Club.",
+                            text = "Añade alimentos eligiendo supermercado, cantidades, ofertas y si es Urgente o Club.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 32.dp),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -267,31 +293,48 @@ fun ShoppingScreen(
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .weight(1f)
                 ) {
-                    items(items, key = { it.id }) { item ->
-                        ShoppingItemCard(
-                            item = item,
-                            onToggle = { viewModel.toggleShoppingItemChecked(item) },
-                            onQtyChange = { delta ->
-                                viewModel.updateShoppingItemQuantity(item, item.quantity + delta)
-                            },
-                            onDelete = { viewModel.deleteShoppingItem(item) }
-                        )
+                    item {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                        ) {
+                            Column {
+                                items.forEachIndexed { index, item ->
+                                    ShoppingItemRow(
+                                        item = item,
+                                        onToggle = { viewModel.toggleShoppingItemChecked(item) },
+                                        onQtyChange = { delta ->
+                                            viewModel.updateShoppingItemQuantity(item, item.quantity + delta)
+                                        },
+                                        onDelete = { viewModel.deleteShoppingItem(item) }
+                                    )
+                                    if (index < items.lastIndex) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(horizontal = 16.dp),
+                                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                     item {
-                        Spacer(modifier = Modifier.height(80.dp))
+                        Spacer(modifier = Modifier.height(84.dp))
                     }
                 }
             }
         }
 
-        // Extended FAB
         ExtendedFloatingActionButton(
             onClick = { viewModel.setShowAddShoppingDialog(true) },
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
             icon = { Icon(Icons.Default.Add, contentDescription = null) },
-            text = { Text("Añadir Alimento") },
+            text = { Text("Añadir producto", style = MaterialTheme.typography.labelLarge) },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(20.dp)
@@ -300,8 +343,9 @@ fun ShoppingScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ShoppingItemCard(
+fun ShoppingItemRow(
     item: ShoppingItemEntity,
     onToggle: () -> Unit,
     onQtyChange: (Double) -> Unit,
@@ -312,197 +356,199 @@ fun ShoppingItemCard(
         "carrefour" -> ColorCarrefour
         "lidl" -> ColorLidl
         "alcampo" -> ColorAlcampo
-        else -> Color(0xFF64748B)
+        else -> ColorOtherSupermarket
     }
 
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 12.dp, vertical = 12.dp)
             .testTag("shopping_item_${item.id}"),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (item.isChecked) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (item.isChecked) 0.dp else 2.dp)
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+        Checkbox(
+            checked = item.isChecked,
+            onCheckedChange = { onToggle() },
+            colors = CheckboxDefaults.colors(
+                checkedColor = MaterialTheme.colorScheme.primary
+            ),
+            modifier = Modifier.testTag("shopping_checkbox_${item.id}")
+        )
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Checkbox
-                Checkbox(
-                    checked = item.isChecked,
-                    onCheckedChange = { onToggle() },
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = MaterialTheme.colorScheme.primary
-                    ),
-                    modifier = Modifier.testTag("shopping_checkbox_${item.id}")
-                )
+                Surface(
+                    shape = RoundedCornerShape(5.dp),
+                    color = superColor.copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        text = item.supermarket.uppercase(),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = superColor,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
 
-                Spacer(modifier = Modifier.width(6.dp))
-
-                // Product details
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                if (item.priority == "URGENTE") {
+                    Surface(
+                        shape = RoundedCornerShape(5.dp),
+                        color = PriorityUrgenteBg
                     ) {
-                        // Supermarket Badge
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = superColor
+                        Text(
+                            text = "URGENTE",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = PriorityUrgente,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                } else if (item.priority == "CLUB") {
+                    Surface(
+                        shape = RoundedCornerShape(5.dp),
+                        color = PriorityClubBg
+                    ) {
+                        Text(
+                            text = "CLUB",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = PriorityClub,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                if (item.hasOffer) {
+                    Surface(
+                        shape = RoundedCornerShape(5.dp),
+                        color = OfferBadgeBg
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            Icon(
+                                Icons.Outlined.LocalOffer,
+                                contentDescription = null,
+                                tint = OfferBadgeColor,
+                                modifier = Modifier.size(10.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = item.supermarket,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                text = "OFERTA",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = OfferBadgeColor
                             )
                         }
-
-                        // Priority Badge: Urgente, Club or Normal
-                        if (item.priority == "URGENTE") {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = PriorityUrgente
-                            ) {
-                                Text(
-                                    text = "⚡ Urgente",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        } else if (item.priority == "CLUB") {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = PriorityClub
-                            ) {
-                                Text(
-                                    text = "⭐ Club",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-
-                        // Offer Badge
-                        if (item.hasOffer) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = OfferBadgeColor
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Default.LocalOffer,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(10.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text(
-                                        text = "Oferta",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-                        }
                     }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    // Title
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontWeight = if (item.isChecked) FontWeight.Normal else FontWeight.SemiBold,
-                            textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None
-                        ),
-                        color = if (item.isChecked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
-                    )
-
-                    // Offer Details Text
-                    if (item.hasOffer && item.offerDetails.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "🎁 ${item.offerDetails}",
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                            color = OfferBadgeColor
-                        )
-                    }
-
-                    // Notes
-                    if (item.notes.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "📝 ${item.notes}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    Text(
-                        text = "Añadido por ${item.addedByMemberName} · ${item.category}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
+            }
 
-                // Quantity +/- Controls
-                Column(horizontalAlignment = Alignment.End) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        FilledTonalIconButton(
-                            onClick = { onQtyChange(-1.0) },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(Icons.Default.Remove, contentDescription = "Menos", modifier = Modifier.size(14.dp))
-                        }
+            Spacer(modifier = Modifier.height(5.dp))
 
-                        val qtyString = if (item.quantity % 1.0 == 0.0) item.quantity.toInt().toString() else item.quantity.toString()
-                        Text(
-                            text = "$qtyString ${item.unit}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 4.dp)
-                        )
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.bodyLarge.copy(
+                    fontWeight = if (item.isChecked) FontWeight.Normal else FontWeight.SemiBold,
+                    textDecoration = if (item.isChecked) TextDecoration.LineThrough else TextDecoration.None
+                ),
+                color = if (item.isChecked) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+            )
 
-                        FilledTonalIconButton(
-                            onClick = { onQtyChange(1.0) },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = "Más", modifier = Modifier.size(14.dp))
-                        }
-                    }
+            if (item.hasOffer && item.offerDetails.isNotBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = item.offerDetails,
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = OfferBadgeColor
+                )
+            }
 
-                    Spacer(modifier = Modifier.height(4.dp))
+            if (item.notes.isNotBlank()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = item.notes,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.size(26.dp)
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Text(
+                text = "${item.addedByMemberName} · ${item.category}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Compact quantity stepper + delete
+        Column(horizontalAlignment = Alignment.End) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { onQtyChange(-1.0) },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Eliminar de la lista",
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
-                            modifier = Modifier.size(16.dp)
+                            Icons.Default.Remove,
+                            contentDescription = "Reducir cantidad",
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    val qtyString = if (item.quantity % 1.0 == 0.0) item.quantity.toInt().toString() else item.quantity.toString()
+                    Text(
+                        text = "$qtyString ${item.unit}",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = 6.dp)
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { onQtyChange(1.0) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = "Aumentar cantidad",
+                            modifier = Modifier.size(14.dp),
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.size(28.dp)
+            ) {
+                Icon(
+                    Icons.Outlined.Delete,
+                    contentDescription = "Eliminar de la lista",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }
@@ -511,30 +557,36 @@ fun ShoppingItemCard(
 @Composable
 fun SupermarketFilterChip(
     name: String,
-    emoji: String,
     isSelected: Boolean,
     onClick: () -> Unit,
     color: Color
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = if (isSelected) color else MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(20.dp),
+        color = if (isSelected) color else MaterialTheme.colorScheme.surface,
+        border = if (isSelected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .testTag("supermarket_filter_$name")
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = emoji, fontSize = 12.sp)
-            Spacer(modifier = Modifier.width(4.dp))
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(if (isSelected) Color.White else color)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = name,
-                fontSize = 11.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                ),
+                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
             )
         }
     }

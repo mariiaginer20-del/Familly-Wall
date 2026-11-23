@@ -1,12 +1,16 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,26 +18,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.Assignment
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -42,17 +38,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.local.CalendarEventEntity
-import com.example.data.local.FamilyTaskEntity
-import com.example.data.local.MealPlanEntity
-import com.example.data.local.ShoppingItemEntity
 import com.example.ui.FamilyWallViewModel
 import com.example.ui.MainTab
 import com.example.ui.theme.PriorityClub
+import com.example.ui.theme.PriorityClubBg
 import com.example.ui.theme.PriorityUrgente
+import com.example.ui.theme.PriorityUrgenteBg
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -73,7 +68,6 @@ fun HomeScreen(
     val urgentShopping = shoppingItems.filter { !it.isChecked && (it.priority == "URGENTE" || it.priority == "CLUB") }
     val nextEvent = events.firstOrNull()
 
-    // Determine current day of week (0 = Monday, 6 = Sunday)
     val calendar = Calendar.getInstance()
     val dayOfWeekSundayBased = calendar.get(Calendar.DAY_OF_WEEK)
     val dayOfWeekMondayBased = if (dayOfWeekSundayBased == Calendar.SUNDAY) 6 else dayOfWeekSundayBased - 2
@@ -85,218 +79,229 @@ fun HomeScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
+        // Editorial Hero Summary (no nested card-in-card!)
         item {
-            Spacer(modifier = Modifier.height(6.dp))
-            // Welcome Header
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Text(
-                        text = "🏡 ¡Buenos días, Familia!",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = dateFormatted,
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
-                        )
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Quick Stats Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        StatItem(
-                            count = events.size,
-                            label = "Eventos",
-                            icon = Icons.Default.CalendarMonth,
-                            onClick = { onNavigateToTab(MainTab.CALENDAR) }
-                        )
-                        StatItem(
-                            count = pendingTasks.size,
-                            label = "Tareas pend.",
-                            icon = Icons.Default.Assignment,
-                            onClick = { onNavigateToTab(MainTab.TASKS) }
-                        )
-                        StatItem(
-                            count = shoppingItems.count { !it.isChecked },
-                            label = "En compra",
-                            icon = Icons.Default.ShoppingCart,
-                            onClick = { onNavigateToTab(MainTab.SHOPPING) }
-                        )
-                    }
-                }
-            }
-        }
-
-        // Next Upcoming Event Banner
-        if (nextEvent != null) {
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigateToTab(MainTab.CALENDAR) },
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = dateFormatted.uppercase(),
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        letterSpacing = 1.2.sp,
+                        fontWeight = FontWeight.Bold
                     ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Resumen del día",
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Unified tonal summary bar with vertical hairline dividers (no nested cards)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                    modifier = Modifier.size(32.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            Icons.Default.NotificationsActive,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "PRÓXIMO EVENTO",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    letterSpacing = 1.sp
-                                )
-                            }
-
-                            OutlinedButton(
-                                onClick = { viewModel.triggerEventNotification(nextEvent) },
-                                modifier = Modifier
-                                    .height(32.dp)
-                                    .testTag("home_test_notification_btn"),
-                                contentPadding = ButtonDefaults.ContentPadding
-                            ) {
-                                Text("Avisar", fontSize = 11.sp)
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        Text(
-                            text = nextEvent.title,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "⏰ ${nextEvent.startTime} - ${nextEvent.endTime}",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.secondaryContainer
-                            ) {
-                                Text(
-                                    text = "👤 ${nextEvent.assignedMemberName}",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    ),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-
-                        if (nextEvent.location.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "📍 ${nextEvent.location}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Today's Meals Section
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onNavigateToTab(MainTab.MEALS) },
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min)
+                            .padding(vertical = 16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("🍲", fontSize = 18.sp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Menú Familiar de Hoy",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-                        Icon(
-                            Icons.Default.ArrowForward,
-                            contentDescription = "Ver menú semanal",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
+                        SummaryStatColumn(
+                            count = events.size,
+                            label = "Eventos",
+                            onClick = { onNavigateToTab(MainTab.CALENDAR) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        VerticalDivider(
+                            modifier = Modifier.fillMaxHeight(),
+                            thickness = 1.dp,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
+                        )
+                        SummaryStatColumn(
+                            count = pendingTasks.size,
+                            label = "Tareas",
+                            onClick = { onNavigateToTab(MainTab.TASKS) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        VerticalDivider(
+                            modifier = Modifier.fillMaxHeight(),
+                            thickness = 1.dp,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
+                        )
+                        SummaryStatColumn(
+                            count = shoppingItems.count { !it.isChecked },
+                            label = "En compra",
+                            onClick = { onNavigateToTab(MainTab.SHOPPING) },
+                            modifier = Modifier.weight(1f)
                         )
                     }
+                }
+            }
+        }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+        // Next Upcoming Event
+        if (nextEvent != null) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SectionHeaderRow(
+                        eyebrow = "AGENDA COMPARTIDA",
+                        title = "Próximo evento",
+                        actionLabel = "Ver agenda",
+                        onAction = { onNavigateToTab(MainTab.CALENDAR) }
+                    )
 
-                    val mealTypes = listOf("DESAYUNO" to "🥐 Desayuno", "COMIDA" to "🍲 Comida", "MERIENDA" to "🍎 Merienda", "CENA" to "🥗 Cena")
-                    mealTypes.forEach { (type, label) ->
-                        val dish = todayMeals.firstOrNull { it.mealType == type }?.dishName ?: "Por definir"
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.medium)
+                            .clickable { onNavigateToTab(MainTab.CALENDAR) },
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                                .height(IntrinsicSize.Min)
+                                .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = MaterialTheme.colorScheme.primary
+                            val accent = runCatching {
+                                Color(android.graphics.Color.parseColor(nextEvent.memberColorHex))
+                            }.getOrDefault(MaterialTheme.colorScheme.primary)
+
+                            Box(
+                                modifier = Modifier
+                                    .width(4.dp)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(accent)
                             )
-                            Text(
-                                text = dish,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+
+                            Spacer(modifier = Modifier.width(14.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${nextEvent.startTime} – ${nextEvent.endTime} · ${nextEvent.assignedMemberName}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = nextEvent.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                if (nextEvent.location.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Outlined.LocationOn,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = nextEvent.location,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                OutlinedButton(
+                                    onClick = { viewModel.triggerEventNotification(nextEvent) },
+                                    modifier = Modifier
+                                        .height(34.dp)
+                                        .testTag("home_test_notification_btn"),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.NotificationsActive,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Enviar recordatorio", style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Today's Menu (clean hairline rows inside one paper sheet)
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionHeaderRow(
+                    eyebrow = "PLANNING DE COMIDAS",
+                    title = "Menú de hoy",
+                    actionLabel = "Semana",
+                    onAction = { onNavigateToTab(MainTab.MEALS) }
+                )
+
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.medium)
+                        .clickable { onNavigateToTab(MainTab.MEALS) },
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        val mealTypes = listOf(
+                            "DESAYUNO" to "Desayuno",
+                            "COMIDA" to "Comida",
+                            "MERIENDA" to "Merienda",
+                            "CENA" to "Cena"
+                        )
+                        mealTypes.forEachIndexed { idx, (type, label) ->
+                            val dish = todayMeals.firstOrNull { it.mealType == type }?.dishName ?: "Sin definir"
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.width(88.dp)
+                                )
+                                Text(
+                                    text = dish,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (dish == "Sin definir") MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            if (idx < mealTypes.lastIndex) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                            }
                         }
                     }
                 }
@@ -306,75 +311,69 @@ fun HomeScreen(
         // Urgent & Club Shopping Items
         if (urgentShopping.isNotEmpty()) {
             item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onNavigateToTab(MainTab.SHOPPING) },
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("⚡", fontSize = 18.sp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Compra Urgente & Club",
-                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-                                )
-                            }
-                            Text(
-                                text = "${urgentShopping.size} items",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            )
-                        }
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SectionHeaderRow(
+                        eyebrow = "PRIORITARIOS EN COMPRA",
+                        title = "Urgente & Club",
+                        actionLabel = "Lista (${urgentShopping.size})",
+                        onAction = { onNavigateToTab(MainTab.SHOPPING) }
+                    )
 
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        urgentShopping.take(3).forEach { item ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = if (item.priority == "URGENTE") PriorityUrgente else PriorityClub
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.medium)
+                            .clickable { onNavigateToTab(MainTab.SHOPPING) },
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            val shown = urgentShopping.take(4)
+                            shown.forEachIndexed { idx, item ->
+                                val isUrgent = item.priority == "URGENTE"
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
                                     ) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = if (isUrgent) PriorityUrgenteBg else PriorityClubBg
+                                        ) {
+                                            Text(
+                                                text = if (isUrgent) "URGENTE" else "CLUB",
+                                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                color = if (isUrgent) PriorityUrgente else PriorityClub,
+                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
                                         Text(
-                                            text = if (item.priority == "URGENTE") "⚡ Urgente" else "⭐ Club",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            text = item.name,
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
+                                    val qtyStr = if (item.quantity % 1.0 == 0.0) item.quantity.toInt().toString() else item.quantity.toString()
                                     Text(
-                                        text = item.name,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                                        maxLines = 1
+                                        text = "$qtyStr ${item.unit} · ${item.supermarket}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-
-                                Text(
-                                    text = "${if (item.quantity % 1.0 == 0.0) item.quantity.toInt() else item.quantity} ${item.unit} (${item.supermarket})",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                if (idx < shown.lastIndex) {
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
+                                }
                             }
                         }
                     }
@@ -384,75 +383,70 @@ fun HomeScreen(
 
         // Pending Tasks
         item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onNavigateToTab(MainTab.TASKS) },
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("✅", fontSize = 18.sp)
-                            Spacer(modifier = Modifier.width(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionHeaderRow(
+                    eyebrow = "RESPONSABILIDADES",
+                    title = "Tareas pendientes",
+                    actionLabel = "Todas (${pendingTasks.size})",
+                    onAction = { onNavigateToTab(MainTab.TASKS) }
+                )
+
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.medium)
+                        .clickable { onNavigateToTab(MainTab.TASKS) },
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                        if (pendingTasks.isEmpty()) {
                             Text(
-                                text = "Tareas Familiares Pendientes",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                                text = "Todas las tareas familiares están completadas.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(vertical = 8.dp)
                             )
-                        }
-                        Text(
-                            text = "${pendingTasks.size} pendientes",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    if (pendingTasks.isEmpty()) {
-                        Text(
-                            text = "¡Todas las tareas al día! Gran trabajo en equipo 🎉",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        pendingTasks.take(3).forEach { task ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                    Text(text = task.assignedMemberEmoji, fontSize = 14.sp)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = task.title,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 1
-                                    )
-                                }
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant
+                        } else {
+                            val shown = pendingTasks.take(4)
+                            shown.forEachIndexed { idx, task ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = task.assignedMemberName,
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = task.title,
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "${task.dueDate} · ${task.category}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant
+                                    ) {
+                                        Text(
+                                            text = task.assignedMemberName,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                                if (idx < shown.lastIndex) {
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
                                 }
                             }
                         }
@@ -462,51 +456,84 @@ fun HomeScreen(
         }
 
         item {
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
         }
     }
 }
 
 @Composable
-private fun StatItem(
+private fun SummaryStatColumn(
     count: Int,
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-        modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
             .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "$count",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                )
-            }
-            Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = "$count",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.onPrimary
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
+        )
+    }
+}
+
+@Composable
+private fun SectionHeaderRow(
+    eyebrow: String,
+    title: String,
+    actionLabel: String,
+    onAction: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Bottom
+    ) {
+        Column {
             Text(
-                text = label,
+                text = eyebrow,
                 style = MaterialTheme.typography.labelSmall.copy(
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                    letterSpacing = 1.1.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onAction)
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = actionLabel,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(
+                Icons.AutoMirrored.Outlined.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(15.dp)
             )
         }
     }

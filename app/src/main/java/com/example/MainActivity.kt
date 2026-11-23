@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
@@ -29,10 +30,12 @@ import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -46,7 +49,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.FamilyWallViewModel
 import com.example.ui.MainTab
@@ -96,13 +98,12 @@ fun MainApp(viewModel: FamilyWallViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
-    // Request Notification permission on Android 13+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { isGranted ->
             if (isGranted) {
                 viewModel.notificationManager.showReminderNotification(
-                    title = "🔔 Notificaciones activadas",
+                    title = "Notificaciones activadas",
                     message = "Recibirás avisos para los próximos eventos y compras familiares."
                 )
             }
@@ -115,8 +116,17 @@ fun MainApp(viewModel: FamilyWallViewModel) {
         }
     }
 
+    val navItemColors = NavigationBarItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        selectedTextColor = MaterialTheme.colorScheme.primary,
+        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -129,11 +139,11 @@ fun MainApp(viewModel: FamilyWallViewModel) {
                     if (events.isNotEmpty()) {
                         viewModel.triggerEventNotification(events.first())
                         coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Aviso de '${events.first().title}' enviado a notificaciones")
+                            snackbarHostState.showSnackbar("Aviso de '${events.first().title}' enviado")
                         }
                     } else {
                         viewModel.notificationManager.showReminderNotification(
-                            title = "🏡 Family Wall",
+                            title = "Family Wall",
                             message = "No hay eventos urgentes pendientes para hoy."
                         )
                         coroutineScope.launch {
@@ -144,106 +154,158 @@ fun MainApp(viewModel: FamilyWallViewModel) {
             )
         },
         bottomBar = {
-            NavigationBar(
-                modifier = Modifier
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-                    .testTag("main_navigation_bar")
-            ) {
-                // Tab 1: Muro
-                NavigationBarItem(
-                    selected = currentTab == MainTab.HOME,
-                    onClick = { viewModel.selectTab(MainTab.HOME) },
-                    icon = {
-                        Icon(
-                            if (currentTab == MainTab.HOME) Icons.Filled.Home else Icons.Outlined.Home,
-                            contentDescription = "Muro"
-                        )
-                    },
-                    label = { Text("Muro", fontSize = 11.sp, fontWeight = if (currentTab == MainTab.HOME) FontWeight.Bold else FontWeight.Normal) },
-                    modifier = Modifier.testTag("nav_tab_home")
+            Column {
+                HorizontalDivider(
+                    thickness = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant
                 )
-
-                // Tab 2: Agenda (Calendario)
-                NavigationBarItem(
-                    selected = currentTab == MainTab.CALENDAR,
-                    onClick = { viewModel.selectTab(MainTab.CALENDAR) },
-                    icon = {
-                        BadgedBox(
-                            badge = {
-                                if (events.isNotEmpty()) {
-                                    Badge { Text("${events.size}") }
-                                }
-                            }
-                        ) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .testTag("main_navigation_bar")
+                ) {
+                    NavigationBarItem(
+                        selected = currentTab == MainTab.HOME,
+                        onClick = { viewModel.selectTab(MainTab.HOME) },
+                        colors = navItemColors,
+                        icon = {
                             Icon(
-                                if (currentTab == MainTab.CALENDAR) Icons.Filled.CalendarMonth else Icons.Outlined.CalendarMonth,
-                                contentDescription = "Agenda"
+                                if (currentTab == MainTab.HOME) Icons.Filled.Home else Icons.Outlined.Home,
+                                contentDescription = "Muro"
                             )
-                        }
-                    },
-                    label = { Text("Agenda", fontSize = 11.sp, fontWeight = if (currentTab == MainTab.CALENDAR) FontWeight.Bold else FontWeight.Normal) },
-                    modifier = Modifier.testTag("nav_tab_calendar")
-                )
+                        },
+                        label = {
+                            Text(
+                                "Muro",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (currentTab == MainTab.HOME) FontWeight.Bold else FontWeight.Medium
+                                )
+                            )
+                        },
+                        modifier = Modifier.testTag("nav_tab_home")
+                    )
 
-                // Tab 3: Tareas (al lado de agenda como solicitado por el usuario)
-                val pendingTasksCount = tasks.count { !it.isCompleted }
-                NavigationBarItem(
-                    selected = currentTab == MainTab.TASKS,
-                    onClick = { viewModel.selectTab(MainTab.TASKS) },
-                    icon = {
-                        BadgedBox(
-                            badge = {
-                                if (pendingTasksCount > 0) {
-                                    Badge { Text("$pendingTasksCount") }
+                    NavigationBarItem(
+                        selected = currentTab == MainTab.CALENDAR,
+                        onClick = { viewModel.selectTab(MainTab.CALENDAR) },
+                        colors = navItemColors,
+                        icon = {
+                            BadgedBox(
+                                badge = {
+                                    if (events.isNotEmpty()) {
+                                        Badge(
+                                            containerColor = MaterialTheme.colorScheme.secondary,
+                                            contentColor = MaterialTheme.colorScheme.onSecondary
+                                        ) { Text("${events.size}") }
+                                    }
                                 }
+                            ) {
+                                Icon(
+                                    if (currentTab == MainTab.CALENDAR) Icons.Filled.CalendarMonth else Icons.Outlined.CalendarMonth,
+                                    contentDescription = "Agenda"
+                                )
                             }
-                        ) {
-                            Icon(
-                                if (currentTab == MainTab.TASKS) Icons.Filled.Assignment else Icons.Outlined.Assignment,
-                                contentDescription = "Tareas"
+                        },
+                        label = {
+                            Text(
+                                "Agenda",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (currentTab == MainTab.CALENDAR) FontWeight.Bold else FontWeight.Medium
+                                )
                             )
-                        }
-                    },
-                    label = { Text("Tareas", fontSize = 11.sp, fontWeight = if (currentTab == MainTab.TASKS) FontWeight.Bold else FontWeight.Normal) },
-                    modifier = Modifier.testTag("nav_tab_tasks")
-                )
+                        },
+                        modifier = Modifier.testTag("nav_tab_calendar")
+                    )
 
-                // Tab 4: Compra (con cantidades, ofertas, supermercados y Club)
-                val pendingShoppingCount = shoppingItems.count { !it.isChecked }
-                NavigationBarItem(
-                    selected = currentTab == MainTab.SHOPPING,
-                    onClick = { viewModel.selectTab(MainTab.SHOPPING) },
-                    icon = {
-                        BadgedBox(
-                            badge = {
-                                if (pendingShoppingCount > 0) {
-                                    Badge { Text("$pendingShoppingCount") }
+                    val pendingTasksCount = tasks.count { !it.isCompleted }
+                    NavigationBarItem(
+                        selected = currentTab == MainTab.TASKS,
+                        onClick = { viewModel.selectTab(MainTab.TASKS) },
+                        colors = navItemColors,
+                        icon = {
+                            BadgedBox(
+                                badge = {
+                                    if (pendingTasksCount > 0) {
+                                        Badge(
+                                            containerColor = MaterialTheme.colorScheme.secondary,
+                                            contentColor = MaterialTheme.colorScheme.onSecondary
+                                        ) { Text("$pendingTasksCount") }
+                                    }
                                 }
+                            ) {
+                                Icon(
+                                    if (currentTab == MainTab.TASKS) Icons.Filled.Assignment else Icons.Outlined.Assignment,
+                                    contentDescription = "Tareas"
+                                )
                             }
-                        ) {
-                            Icon(
-                                if (currentTab == MainTab.SHOPPING) Icons.Filled.ShoppingCart else Icons.Outlined.ShoppingCart,
-                                contentDescription = "Compra"
+                        },
+                        label = {
+                            Text(
+                                "Tareas",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (currentTab == MainTab.TASKS) FontWeight.Bold else FontWeight.Medium
+                                )
                             )
-                        }
-                    },
-                    label = { Text("Compra", fontSize = 11.sp, fontWeight = if (currentTab == MainTab.SHOPPING) FontWeight.Bold else FontWeight.Normal) },
-                    modifier = Modifier.testTag("nav_tab_shopping")
-                )
+                        },
+                        modifier = Modifier.testTag("nav_tab_tasks")
+                    )
 
-                // Tab 5: Comidas & Recetas
-                NavigationBarItem(
-                    selected = currentTab == MainTab.MEALS,
-                    onClick = { viewModel.selectTab(MainTab.MEALS) },
-                    icon = {
-                        Icon(
-                            if (currentTab == MainTab.MEALS) Icons.Filled.Restaurant else Icons.Outlined.Restaurant,
-                            contentDescription = "Comidas"
-                        )
-                    },
-                    label = { Text("Comidas", fontSize = 11.sp, fontWeight = if (currentTab == MainTab.MEALS) FontWeight.Bold else FontWeight.Normal) },
-                    modifier = Modifier.testTag("nav_tab_meals")
-                )
+                    val pendingShoppingCount = shoppingItems.count { !it.isChecked }
+                    NavigationBarItem(
+                        selected = currentTab == MainTab.SHOPPING,
+                        onClick = { viewModel.selectTab(MainTab.SHOPPING) },
+                        colors = navItemColors,
+                        icon = {
+                            BadgedBox(
+                                badge = {
+                                    if (pendingShoppingCount > 0) {
+                                        Badge(
+                                            containerColor = MaterialTheme.colorScheme.secondary,
+                                            contentColor = MaterialTheme.colorScheme.onSecondary
+                                        ) { Text("$pendingShoppingCount") }
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    if (currentTab == MainTab.SHOPPING) Icons.Filled.ShoppingCart else Icons.Outlined.ShoppingCart,
+                                    contentDescription = "Compra"
+                                )
+                            }
+                        },
+                        label = {
+                            Text(
+                                "Compra",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (currentTab == MainTab.SHOPPING) FontWeight.Bold else FontWeight.Medium
+                                )
+                            )
+                        },
+                        modifier = Modifier.testTag("nav_tab_shopping")
+                    )
+
+                    NavigationBarItem(
+                        selected = currentTab == MainTab.MEALS,
+                        onClick = { viewModel.selectTab(MainTab.MEALS) },
+                        colors = navItemColors,
+                        icon = {
+                            Icon(
+                                if (currentTab == MainTab.MEALS) Icons.Filled.Restaurant else Icons.Outlined.Restaurant,
+                                contentDescription = "Comidas"
+                            )
+                        },
+                        label = {
+                            Text(
+                                "Comidas",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = if (currentTab == MainTab.MEALS) FontWeight.Bold else FontWeight.Medium
+                                )
+                            )
+                        },
+                        modifier = Modifier.testTag("nav_tab_meals")
+                    )
+                }
             }
         }
     ) { innerPadding ->
@@ -273,7 +335,6 @@ fun MainApp(viewModel: FamilyWallViewModel) {
         }
     }
 
-    // Dialogs
     if (showAddShopping) {
         AddShoppingItemDialog(
             members = members,

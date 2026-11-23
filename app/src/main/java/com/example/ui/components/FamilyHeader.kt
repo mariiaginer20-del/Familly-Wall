@@ -1,5 +1,6 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,10 +18,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Group
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,161 +47,160 @@ fun FamilyHeader(
     onNotificationClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp,
-        shadowElevation = 1.dp
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "🏡",
-                            fontSize = 20.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "Family Wall",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        )
-                        Text(
-                            text = "Organizador familiar compartido",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        )
-                    }
-                }
-
-                IconButton(
-                    onClick = onNotificationClick,
-                    modifier = Modifier.testTag("notification_bell_button")
-                ) {
-                    BadgedBox(
-                        badge = {
-                            if (pendingEventCount > 0) {
-                                Badge(
-                                    containerColor = MaterialTheme.colorScheme.error,
-                                    contentColor = MaterialTheme.colorScheme.onError
-                                ) {
-                                    Text(text = "$pendingEventCount")
-                                }
-                            }
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Notifications,
-                            contentDescription = "Notificaciones de eventos próximos",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
+            Column {
+                Text(
+                    text = "HOGAR COMPARTIDO",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 1.4.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Family Wall",
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Family member chips row
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+            IconButton(
+                onClick = onNotificationClick,
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("notification_bell_button")
             ) {
-                Text(
-                    text = "Miembro:",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f)
+                BadgedBox(
+                    badge = {
+                        if (pendingEventCount > 0) {
+                            Badge(
+                                containerColor = MaterialTheme.colorScheme.secondary,
+                                contentColor = MaterialTheme.colorScheme.onSecondary
+                            ) {
+                                Text(text = "$pendingEventCount")
+                            }
+                        }
+                    }
                 ) {
-                    item {
-                        FamilyMemberChip(
-                            name = "Todos",
-                            emoji = "👨‍👩‍👧‍👦",
-                            isSelected = selectedMember == "Todos",
-                            onClick = { onSelectMember("Todos") },
-                            testTag = "filter_member_todos"
-                        )
-                    }
-                    items(members, key = { it.id }) { member ->
-                        FamilyMemberChip(
-                            name = member.name,
-                            emoji = member.avatarEmoji,
-                            isSelected = selectedMember == member.name,
-                            onClick = { onSelectMember(member.name) },
-                            testTag = "filter_member_${member.name.lowercase()}"
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Outlined.Notifications,
+                        contentDescription = "Notificaciones de eventos próximos",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
                 }
             }
         }
+
+        // Clean monogram member filter rail
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 6.dp)
+        ) {
+            item {
+                FamilyMemberChip(
+                    name = "Todos",
+                    initial = "T",
+                    accentColor = MaterialTheme.colorScheme.primary,
+                    isSelected = selectedMember == "Todos",
+                    onClick = { onSelectMember("Todos") },
+                    testTag = "filter_member_todos"
+                )
+            }
+            items(members, key = { it.id }) { member ->
+                val memberColor = runCatching {
+                    Color(android.graphics.Color.parseColor(member.colorHex))
+                }.getOrDefault(MaterialTheme.colorScheme.primary)
+
+                FamilyMemberChip(
+                    name = member.name,
+                    initial = member.name.take(1).uppercase(),
+                    accentColor = memberColor,
+                    isSelected = selectedMember == member.name,
+                    onClick = { onSelectMember(member.name) },
+                    testTag = "filter_member_${member.name.lowercase()}"
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+        HorizontalDivider(
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
     }
 }
 
 @Composable
 fun FamilyMemberChip(
     name: String,
-    emoji: String,
+    initial: String,
+    accentColor: Color,
     isSelected: Boolean,
     onClick: () -> Unit,
     testTag: String
 ) {
-    val backgroundColor = if (isSelected) {
+    val containerColor = if (isSelected) {
         MaterialTheme.colorScheme.primary
     } else {
-        MaterialTheme.colorScheme.surfaceVariant
+        MaterialTheme.colorScheme.surface
     }
-
-    val contentColor = if (isSelected) {
+    val textColor = if (isSelected) {
         MaterialTheme.colorScheme.onPrimary
     } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
+        MaterialTheme.colorScheme.onSurface
     }
+    val border = if (isSelected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
 
     Surface(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(24.dp))
             .clickable(onClick = onClick)
             .testTag(testTag),
-        color = backgroundColor,
-        shape = RoundedCornerShape(20.dp)
+        color = containerColor,
+        border = border,
+        shape = RoundedCornerShape(24.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.padding(start = 6.dp, end = 12.dp, top = 5.dp, bottom = 5.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = emoji, fontSize = 14.sp)
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f)
+                        else accentColor.copy(alpha = 0.14f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = initial,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else accentColor
+                )
+            }
+            Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = name,
-                style = MaterialTheme.typography.labelMedium.copy(
+                style = MaterialTheme.typography.labelLarge.copy(
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                    color = contentColor
+                    color = textColor
                 )
             )
         }
