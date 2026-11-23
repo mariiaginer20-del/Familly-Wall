@@ -1,0 +1,50 @@
+name: Compilar APK de Family Wall
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Generar APK Debug
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Configurar Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Preparar keystore y variables de entorno
+        run: |
+          if [ -f debug.keystore.base64 ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+          fi
+          if [ ! -f .env ] && [ -f .env.example ]; then
+            cp .env.example .env
+          fi
+
+      - name: Compilar APK (assembleDebug)
+        run: gradle assembleDebug --no-daemon
+
+      - name: Subir APK como Artifact descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: FamilyWall-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
