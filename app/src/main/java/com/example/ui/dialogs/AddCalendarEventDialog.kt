@@ -22,53 +22,67 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.local.FamilyMemberEntity
+import com.example.data.model.CalendarEvent
 import com.example.data.model.EventCategory
+import com.example.data.model.FamilyMember
 import com.example.ui.CalendarEventDraft
-import java.util.Calendar
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AddCalendarEventDialog(
-    members: List<FamilyMemberEntity>,
+    members: List<FamilyMember>,
     initialDateMillis: Long,
+    initialEvent: CalendarEvent? = null,
     onDismiss: () -> Unit,
     onSave: (CalendarEventDraft) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("") }
-    var startTime by remember { mutableStateOf("17:00") }
-    var endTime by remember { mutableStateOf("18:00") }
-    var assignedMemberName by remember { mutableStateOf("Todos") }
-    var selectedCategory by remember { mutableStateOf(EventCategory.GENERAL) }
-    var reminderMinutes by remember { mutableIntStateOf(15) }
-    var selectedDayOffset by remember { mutableIntStateOf(0) } // 0 = Hoy, 1 = Mañana, 2 = En 2 días, etc.
+    var title by remember(initialEvent) { mutableStateOf(initialEvent?.title ?: "") }
+    var description by remember(initialEvent) { mutableStateOf(initialEvent?.description ?: "") }
+    var location by remember(initialEvent) { mutableStateOf(initialEvent?.location ?: "") }
+    var targetMillis by remember(initialEvent, initialDateMillis) {
+        mutableLongStateOf(initialEvent?.dateEpochMillis ?: initialDateMillis)
+    }
+    var startTime by remember(initialEvent) { mutableStateOf(initialEvent?.startTime ?: "17:00") }
+    var endTime by remember(initialEvent) { mutableStateOf(initialEvent?.endTime ?: "18:00") }
+    var assignedMemberName by remember(initialEvent) { mutableStateOf(initialEvent?.assignedMemberName ?: "Todos") }
+    var selectedCategory by remember(initialEvent) {
+        mutableStateOf(initialEvent?.let { EventCategory.fromString(it.category) } ?: EventCategory.GENERAL)
+    }
+    var reminderMinutes by remember(initialEvent) { mutableIntStateOf(initialEvent?.reminderMinutesBefore ?: 15) }
+    var showDatePicker by remember { mutableStateOf(false) }
 
-    val targetMillis = remember(selectedDayOffset) {
-        val cal = Calendar.getInstance()
-        cal.add(Calendar.DAY_OF_YEAR, selectedDayOffset)
-        cal.timeInMillis
+    val formattedDate = remember(targetMillis) {
+        SimpleDateFormat("EEEE, d 'de' MMMM yyyy", Locale("es", "ES"))
+            .format(Date(targetMillis))
+            .replaceFirstChar { it.uppercase() }
     }
 
     val reminderOptions = listOf(
@@ -89,7 +103,7 @@ fun AddCalendarEventDialog(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Nuevo Evento Familiar",
+                    text = if (initialEvent == null) "Nuevo Evento Familiar" else "Editar Evento",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
             }
@@ -112,46 +126,25 @@ fun AddCalendarEventDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Date selector quick pills
                 Text(
-                    text = "Día del evento",
+                    text = "Fecha del evento",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("event_pick_date_button")
                 ) {
-                    val days = listOf("Hoy", "Mañana", "+2 días", "+3 días", "Fin de semana")
-                    days.forEachIndexed { index, label ->
-                        val isSelected = selectedDayOffset == index
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .weight(1f)
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { selectedDayOffset = index }
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp)
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
+                    Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(formattedDate, style = MaterialTheme.typography.labelLarge)
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Time Pickers (Start & End)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -179,14 +172,16 @@ fun AddCalendarEventDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Assigned Family Member
                 Text(
                     text = "Miembro asignado",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     val allOptions = listOf("Todos" to "👨‍👩‍👧‍👦") + members.map { it.name to it.avatarEmoji }
                     allOptions.forEach { (name, emoji) ->
                         val isSelected = assignedMemberName == name
@@ -202,7 +197,7 @@ fun AddCalendarEventDialog(
                                 text = "$emoji $name",
                                 fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             )
                         }
@@ -211,14 +206,16 @@ fun AddCalendarEventDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Category
                 Text(
                     text = "Categoría",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     EventCategory.entries.forEach { cat ->
                         val isSelected = selectedCategory == cat
                         Surface(
@@ -241,10 +238,7 @@ fun AddCalendarEventDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Reminder / Notification setting
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.NotificationsActive,
                         contentDescription = null,
@@ -314,7 +308,7 @@ fun AddCalendarEventDialog(
             Button(
                 onClick = {
                     if (title.isNotBlank()) {
-                        val memberColor = members.firstOrNull { it.name == assignedMemberName }?.colorHex ?: "#3B82F6"
+                        val memberColor = members.firstOrNull { it.name == assignedMemberName }?.colorHex ?: "#1B4D3E"
                         onSave(
                             CalendarEventDraft(
                                 title = title,
@@ -334,7 +328,7 @@ fun AddCalendarEventDialog(
                 enabled = title.isNotBlank(),
                 modifier = Modifier.testTag("save_event_button")
             ) {
-                Text("Guardar Evento")
+                Text(if (initialEvent == null) "Guardar Evento" else "Actualizar Evento")
             }
         },
         dismissButton = {
@@ -343,4 +337,24 @@ fun AddCalendarEventDialog(
             }
         }
     )
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = targetMillis)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { targetMillis = it }
+                        showDatePicker = false
+                    }
+                ) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
 }

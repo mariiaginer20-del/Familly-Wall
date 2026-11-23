@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,16 +19,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.LocationOn
-import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,11 +53,26 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.local.CalendarEventEntity
+import com.example.data.model.CalendarEvent
+import com.example.data.model.EventCategory
+import com.example.data.preferences.AppDesignStyle
 import com.example.ui.FamilyWallViewModel
+import com.example.ui.theme.LocalDesignStyle
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
+
+private fun dayKey(epochMillis: Long): Long {
+    val cal = Calendar.getInstance().apply {
+        timeInMillis = epochMillis
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return cal.get(Calendar.YEAR) * 10000L + (cal.get(Calendar.MONTH) + 1) * 100L + cal.get(Calendar.DAY_OF_MONTH)
+}
 
 @Composable
 fun CalendarScreen(
@@ -63,23 +81,68 @@ fun CalendarScreen(
 ) {
     val events by viewModel.filteredEvents.collectAsStateWithLifecycle()
     val selectedMember by viewModel.selectedMemberFilter.collectAsStateWithLifecycle()
+    val selectedDateMillis by viewModel.selectedCalendarDateMillis.collectAsStateWithLifecycle()
 
-    var selectedDayOffset by remember { mutableIntStateOf(0) }
+    val isBento = LocalDesignStyle.current == AppDesignStyle.NORDIC_BENTO
 
-    val daysList = remember {
-        val list = mutableListOf<Triple<Int, String, String>>()
-        val cal = Calendar.getInstance()
-        val dayFormat = SimpleDateFormat("EEE", Locale("es", "ES"))
-        val numFormat = SimpleDateFormat("d", Locale("es", "ES"))
+    val initialCal = remember { Calendar.getInstance() }
+    var displayedYear by remember { mutableIntStateOf(initialCal.get(Calendar.YEAR)) }
+    var displayedMonth by remember { mutableIntStateOf(initialCal.get(Calendar.MONTH)) }
+    var showAllEvents by remember { mutableStateOf(false) }
 
-        for (i in 0..6) {
-            val copy = cal.clone() as Calendar
-            copy.add(Calendar.DAY_OF_YEAR, i)
-            val name = if (i == 0) "HOY" else dayFormat.format(copy.time).replace(".", "").uppercase()
-            val num = numFormat.format(copy.time)
-            list.add(Triple(i, name, num))
+    val todayKey = remember { dayKey(System.currentTimeMillis()) }
+    val selectedDayKey = remember(selectedDateMillis) { dayKey(selectedDateMillis) }
+
+    val eventsByDay = remember(events) {
+        events.groupBy { dayKey(it.dateEpochMillis) }
+    }
+
+    val monthTitle = remember(displayedYear, displayedMonth) {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, displayedYear)
+            set(Calendar.MONTH, displayedMonth)
+            set(Calendar.DAY_OF_MONTH, 1)
         }
-        list
+        SimpleDateFormat("MMMM yyyy", Locale("es", "ES"))
+            .format(cal.time)
+            .replaceFirstChar { it.uppercase() }
+    }
+
+    val calendarCells = remember(displayedYear, displayedMonth) {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, displayedYear)
+            set(Calendar.MONTH, displayedMonth)
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 12)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val firstDayDow = cal.get(Calendar.DAY_OF_WEEK) // Sun=1..Sat=7
+        val leadingEmpty = if (firstDayDow == Calendar.SUNDAY) 6 else firstDayDow - 2
+        val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+
+        val cells = mutableListOf<Pair<Int?, Long?>>()
+        repeat(leadingEmpty) { cells.add(null to null) }
+        for (day in 1..daysInMonth) {
+            cal.set(Calendar.DAY_OF_MONTH, day)
+            cells.add(day to cal.timeInMillis)
+        }
+        while (cells.size % 7 != 0) {
+            cells.add(null to null)
+        }
+        cells.chunked(7)
+    }
+
+    val visibleEvents = remember(events, selectedDayKey, showAllEvents) {
+        if (showAllEvents) events
+        else events.filter { dayKey(it.dateEpochMillis) == selectedDayKey }
+    }
+
+    val selectedDateLabel = remember(selectedDateMillis) {
+        SimpleDateFormat("EEEE, d 'de' MMMM", Locale("es", "ES"))
+            .format(Date(selectedDateMillis))
+            .replaceFirstChar { it.uppercase() }
     }
 
     Box(
@@ -87,152 +150,296 @@ fun CalendarScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 20.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Editorial Section Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (selectedMember == "Todos") "TODA LA FAMILIA" else "FILTRO · ${selectedMember.uppercase()}",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            letterSpacing = 1.2.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Agenda compartida",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
+            // Header
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.NotificationsActive,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Avisos activos",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            text = if (selectedMember == "Todos") "CALENDARIO FAMILIAR" else "AGENDA · ${selectedMember.uppercase()}",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                letterSpacing = 1.2.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Agenda mensual",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = if (!showAllEvents) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(18.dp))
+                            .clickable { showAllEvents = !showAllEvents }
+                            .testTag("calendar_toggle_all_button")
+                    ) {
+                        Text(
+                            text = if (showAllEvents) "Ver solo día" else "Ver todos (${events.size})",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = if (!showAllEvents) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Refined Date Strip
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(daysList) { (offset, name, num) ->
-                    val isSelected = selectedDayOffset == offset
-                    Surface(
-                        shape = MaterialTheme.shapes.medium,
-                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                        border = if (isSelected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier
-                            .clip(MaterialTheme.shapes.medium)
-                            .clickable { selectedDayOffset = offset }
-                            .testTag("calendar_day_offset_$offset")
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier
-                                .width(54.dp)
-                                .padding(vertical = 10.dp)
+            // Monthly Calendar Card
+            item {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        // Month controls
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = name,
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = num,
-                                style = MaterialTheme.typography.titleLarge,
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                            )
+                            IconButton(
+                                onClick = {
+                                    if (displayedMonth == 0) {
+                                        displayedMonth = 11
+                                        displayedYear -= 1
+                                    } else {
+                                        displayedMonth -= 1
+                                    }
+                                },
+                                modifier = Modifier.testTag("calendar_prev_month")
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                    contentDescription = "Mes anterior"
+                                )
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = monthTitle,
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.secondaryContainer,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            val now = Calendar.getInstance()
+                                            displayedYear = now.get(Calendar.YEAR)
+                                            displayedMonth = now.get(Calendar.MONTH)
+                                            viewModel.selectCalendarDate(now.timeInMillis)
+                                        }
+                                        .testTag("calendar_today_button")
+                                ) {
+                                    Text(
+                                        text = "Hoy",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    if (displayedMonth == 11) {
+                                        displayedMonth = 0
+                                        displayedYear += 1
+                                    } else {
+                                        displayedMonth += 1
+                                    }
+                                },
+                                modifier = Modifier.testTag("calendar_next_month")
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = "Mes siguiente"
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Weekday headers (L M X J V S D)
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            listOf("L", "M", "X", "J", "V", "S", "D").forEach { dow ->
+                                Text(
+                                    text = dow,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Calendar weeks
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            calendarCells.forEach { week ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    week.forEach { (dayNum, cellMillis) ->
+                                        if (dayNum == null || cellMillis == null) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(44.dp)
+                                            )
+                                        } else {
+                                            val k = dayKey(cellMillis)
+                                            val isSelected = k == selectedDayKey
+                                            val isToday = k == todayKey
+                                            val dayEvents = eventsByDay[k].orEmpty()
+
+                                            val cellShape = if (isBento) RoundedCornerShape(12.dp) else CircleShape
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(44.dp)
+                                                    .clip(cellShape)
+                                                    .background(
+                                                        when {
+                                                            isSelected -> MaterialTheme.colorScheme.primary
+                                                            isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                                            else -> Color.Transparent
+                                                        }
+                                                    )
+                                                    .then(
+                                                        if (isToday && !isSelected) Modifier.border(
+                                                            1.dp,
+                                                            MaterialTheme.colorScheme.primary,
+                                                            cellShape
+                                                        ) else Modifier
+                                                    )
+                                                    .clickable {
+                                                        viewModel.selectCalendarDate(cellMillis)
+                                                        showAllEvents = false
+                                                    }
+                                                    .testTag("calendar_cell_$dayNum"),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Column(
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                    verticalArrangement = Arrangement.Center
+                                                ) {
+                                                    Text(
+                                                        text = "$dayNum",
+                                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                                            fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Medium
+                                                        ),
+                                                        color = when {
+                                                            isSelected -> MaterialTheme.colorScheme.onPrimary
+                                                            isToday -> MaterialTheme.colorScheme.primary
+                                                            else -> MaterialTheme.colorScheme.onSurface
+                                                        }
+                                                    )
+                                                    if (dayEvents.isNotEmpty()) {
+                                                        Spacer(modifier = Modifier.height(2.dp))
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                            dayEvents.take(3).forEach { ev ->
+                                                                val dotColor = if (isSelected) {
+                                                                    MaterialTheme.colorScheme.onPrimary
+                                                                } else {
+                                                                    runCatching {
+                                                                        Color(android.graphics.Color.parseColor(ev.memberColorHex))
+                                                                    }.getOrDefault(MaterialTheme.colorScheme.secondary)
+                                                                }
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .size(5.dp)
+                                                                        .clip(CircleShape)
+                                                                        .background(dotColor)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            // Events section header
+            item {
+                Text(
+                    text = if (showAllEvents) "Todos los eventos (${visibleEvents.size})" else "$selectedDateLabel (${visibleEvents.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
 
-            if (events.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(horizontal = 32.dp)
+            if (visibleEvents.isEmpty()) {
+                item {
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Event,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.size(44.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "Sin eventos programados",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Añade citas médicas, tutorías o actividades familiares con fecha, hora y aviso.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Event,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "Día despejado",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Pulsa 'Nuevo evento' para programar citas o actividades en esta fecha.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(events, key = { it.id }) { event ->
-                        CalendarEventCard(
-                            event = event,
-                            dateLabel = viewModel.formatEventDate(event.dateEpochMillis),
-                            onTriggerNotification = { viewModel.triggerEventNotification(event) },
-                            onDelete = { viewModel.deleteCalendarEvent(event) }
-                        )
-                    }
-                    item {
-                        Spacer(modifier = Modifier.height(84.dp))
-                    }
+                items(visibleEvents, key = { it.id }) { event ->
+                    CalendarEventCard(
+                        event = event,
+                        dateLabel = viewModel.formatEventDate(event.dateEpochMillis),
+                        onEdit = { viewModel.startEditingEvent(event) },
+                        onTriggerNotification = { viewModel.triggerEventNotification(event) },
+                        onDelete = { viewModel.deleteCalendarEvent(event) }
+                    )
                 }
             }
         }
@@ -253,17 +460,23 @@ fun CalendarScreen(
 
 @Composable
 fun CalendarEventCard(
-    event: CalendarEventEntity,
+    event: CalendarEvent,
     dateLabel: String,
+    onEdit: () -> Unit,
     onTriggerNotification: () -> Unit,
     onDelete: () -> Unit
 ) {
     val memberColor = runCatching {
         Color(android.graphics.Color.parseColor(event.memberColorHex))
     }.getOrDefault(MaterialTheme.colorScheme.primary)
+    val cat = EventCategory.fromString(event.category)
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(onClick = onEdit)
+            .testTag("calendar_event_${event.id}"),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
@@ -274,7 +487,6 @@ fun CalendarEventCard(
                 .height(IntrinsicSize.Min)
                 .padding(16.dp)
         ) {
-            // Time column on the left (clean tabular layout)
             Column(
                 modifier = Modifier.width(56.dp),
                 horizontalAlignment = Alignment.Start
@@ -291,7 +503,6 @@ fun CalendarEventCard(
                 )
             }
 
-            // Member color indicator rule
             Box(
                 modifier = Modifier
                     .width(3.dp)
@@ -302,7 +513,6 @@ fun CalendarEventCard(
 
             Spacer(modifier = Modifier.width(14.dp))
 
-            // Details column
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -310,25 +520,38 @@ fun CalendarEventCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${dateLabel.uppercase()} · ${event.assignedMemberName.uppercase()}",
+                        text = "${cat.emoji} ${dateLabel.uppercase()} · ${event.assignedMemberName.uppercase()}",
                         style = MaterialTheme.typography.labelSmall.copy(
-                            letterSpacing = 0.8.sp,
+                            letterSpacing = 0.7.sp,
                             fontWeight = FontWeight.Bold
                         ),
                         color = memberColor,
                         modifier = Modifier.weight(1f)
                     )
 
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Delete,
-                            contentDescription = "Eliminar evento",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
-                        )
+                    Row {
+                        IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Edit,
+                                contentDescription = "Editar evento",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Delete,
+                                contentDescription = "Eliminar evento",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
 

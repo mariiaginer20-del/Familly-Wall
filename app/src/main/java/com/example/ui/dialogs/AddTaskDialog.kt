@@ -36,28 +36,36 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.local.FamilyMemberEntity
+import com.example.data.model.FamilyMember
+import com.example.data.model.FamilyTask
 import com.example.data.model.TaskPriority
 import com.example.ui.TaskDraft
-import com.example.ui.theme.PriorityNormal
 import com.example.ui.theme.PriorityUrgente
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddTaskDialog(
-    members: List<FamilyMemberEntity>,
+    members: List<FamilyMember>,
+    initialTask: FamilyTask? = null,
     onDismiss: () -> Unit,
     onSave: (TaskDraft) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var assignedMemberName by remember { mutableStateOf(members.firstOrNull()?.name ?: "Todos") }
-    var assignedEmoji by remember { mutableStateOf(members.firstOrNull()?.avatarEmoji ?: "⭐") }
-    var dueDate by remember { mutableStateOf("Hoy") }
-    var priority by remember { mutableStateOf(TaskPriority.MEDIA) }
-    var category by remember { mutableStateOf("Hogar") }
+    var title by remember(initialTask) { mutableStateOf(initialTask?.title ?: "") }
+    var description by remember(initialTask) { mutableStateOf(initialTask?.description ?: "") }
+    var assignedMemberName by remember(initialTask) {
+        mutableStateOf(initialTask?.assignedMemberName ?: members.firstOrNull()?.name ?: "Cualquiera")
+    }
+    var assignedEmoji by remember(initialTask) {
+        mutableStateOf(initialTask?.assignedMemberEmoji ?: members.firstOrNull()?.avatarEmoji ?: "⭐")
+    }
+    var dueDate by remember(initialTask) { mutableStateOf(initialTask?.dueDate ?: "Hoy") }
+    var priority by remember(initialTask) {
+        mutableStateOf(initialTask?.let { TaskPriority.fromString(it.priority) } ?: TaskPriority.MEDIA)
+    }
+    var category by remember(initialTask) { mutableStateOf(initialTask?.category ?: "Hogar") }
 
     val dueOptions = listOf("Hoy", "Mañana", "Esta semana", "Fin de semana", "Sin fecha")
     val categories = listOf("Hogar", "Colegio", "Coche", "Deporte", "Compras", "Mascotas", "Salud")
@@ -73,7 +81,7 @@ fun AddTaskDialog(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Nueva Tarea Familiar",
+                    text = if (initialTask == null) "Nueva Tarea Familiar" else "Editar Tarea",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
             }
@@ -87,7 +95,7 @@ fun AddTaskDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("¿Qué hay que hacer? (ej: Bajar basura, Poner lavadora)") },
+                    label = { Text("¿Qué hay que hacer?") },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -96,15 +104,18 @@ fun AddTaskDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Assigned Member
                 Text(
                     text = "Asignar a:",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val allOptions = listOf(Triple("Cualquiera", "⭐", "Cualquiera")) + members.map { Triple(it.name, it.avatarEmoji, it.name) }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val allOptions = listOf(Triple("Cualquiera", "⭐", "Cualquiera")) +
+                        members.map { Triple(it.name, it.avatarEmoji, it.name) }
                     allOptions.forEach { (name, emoji, tag) ->
                         val isSelected = assignedMemberName == name
                         Surface(
@@ -122,7 +133,7 @@ fun AddTaskDialog(
                                 text = "$emoji $name",
                                 fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             )
                         }
@@ -131,7 +142,6 @@ fun AddTaskDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Due date
                 Text(
                     text = "Fecha límite",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
@@ -158,7 +168,7 @@ fun AddTaskDialog(
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -166,7 +176,6 @@ fun AddTaskDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Priority
                 Text(
                     text = "Prioridad",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
@@ -198,7 +207,7 @@ fun AddTaskDialog(
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(vertical = 8.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -206,14 +215,16 @@ fun AddTaskDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Category
                 Text(
                     text = "Área / Categoría",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     categories.forEach { cat ->
                         val isSelected = category == cat
                         Surface(
@@ -241,7 +252,7 @@ fun AddTaskDialog(
                     onValueChange = { description = it },
                     label = { Text("Detalles opcionales") },
                     singleLine = false,
-                    maxLines = 2,
+                    maxLines = 3,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -266,7 +277,7 @@ fun AddTaskDialog(
                 enabled = title.isNotBlank(),
                 modifier = Modifier.testTag("save_task_button")
             ) {
-                Text("Guardar Tarea")
+                Text(if (initialTask == null) "Guardar Tarea" else "Actualizar Tarea")
             }
         },
         dismissButton = {

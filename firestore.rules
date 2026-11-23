@@ -1,0 +1,539 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny everything not explicitly matched
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HELPERS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidCode(code) {
+      return code is string && code.size() >= 4 && code.size() <= 12 && code.matches('^[A-Z0-9]+$');
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isValidUidList(uids) {
+      return uids is list && uids.size() >= 1 && uids.size() <= 15 && uids[0] is string && uids[0].size() >= 1 && uids[0].size() <= 128;
+    }
+
+    function isFamilyMemberDoc(familyId) {
+      return isSignedIn() &&
+             isValidId(familyId) &&
+             request.auth.uid in get(/databases/$(database)/documents/families/$(familyId)).data.memberUids;
+    }
+
+    function isFamilyMemberAfter(familyId) {
+      return isSignedIn() &&
+             isValidId(familyId) &&
+             request.auth.uid in getAfter(/databases/$(database)/documents/families/$(familyId)).data.memberUids;
+    }
+
+    // --- ENTITY VALIDATION HELPERS ---
+
+    function isValidUserProfile(data) {
+      return data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 150)) &&
+             (!('familyId' in data) || isValidId(data.familyId)) &&
+             data.avatarEmoji is string && data.avatarEmoji.size() >= 1 && data.avatarEmoji.size() <= 16 &&
+             data.colorHex is string && data.colorHex.size() >= 4 && data.colorHex.size() <= 16;
+    }
+
+    function isValidInviteCode(data) {
+      return isValidId(data.familyId) &&
+             data.familyName is string && data.familyName.size() >= 1 && data.familyName.size() <= 60 &&
+             data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128;
+    }
+
+    function isValidFamilyUnit(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
+             isValidCode(data.inviteCode) &&
+             data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+             isValidUidList(data.memberUids);
+    }
+
+    function isValidFamilyMember(data) {
+      return isValidId(data.familyId) &&
+             (!('linkedUid' in data) || (data.linkedUid is string && data.linkedUid.size() >= 1 && data.linkedUid.size() <= 128)) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 40 &&
+             data.role is string && data.role.size() >= 1 && data.role.size() <= 30 &&
+             data.avatarEmoji is string && data.avatarEmoji.size() >= 1 && data.avatarEmoji.size() <= 16 &&
+             data.colorHex is string && data.colorHex.size() >= 4 && data.colorHex.size() <= 16 &&
+             isValidUidList(data.memberUids);
+    }
+
+    function isValidShoppingItem(data) {
+      return isValidId(data.familyId) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+             data.quantity is number && data.quantity > 0 && data.quantity <= 10000 &&
+             data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 20 &&
+             data.supermarket is string && data.supermarket.size() >= 1 && data.supermarket.size() <= 40 &&
+             data.priority in ['NORMAL', 'URGENTE', 'CLUB'] &&
+             data.hasOffer is bool &&
+             data.offerDetails is string && data.offerDetails.size() <= 150 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 60 &&
+             data.checked is bool &&
+             data.addedByMemberName is string && data.addedByMemberName.size() >= 1 && data.addedByMemberName.size() <= 40 &&
+             data.notes is string && data.notes.size() <= 300 &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isValidUidList(data.memberUids);
+    }
+
+    function isValidCustomList(data) {
+      return isValidId(data.familyId) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 60 &&
+             data.emoji is string && data.emoji.size() >= 1 && data.emoji.size() <= 16 &&
+             data.colorHex is string && data.colorHex.size() >= 4 && data.colorHex.size() <= 16 &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isValidUidList(data.memberUids);
+    }
+
+    function isValidCustomListItem(data) {
+      return isValidId(data.familyId) &&
+             isValidId(data.listId) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.quantity is string && data.quantity.size() <= 40 &&
+             data.notes is string && data.notes.size() <= 300 &&
+             data.assignedMemberName is string && data.assignedMemberName.size() >= 1 && data.assignedMemberName.size() <= 40 &&
+             data.checked is bool &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isValidUidList(data.memberUids);
+    }
+
+    function isValidCalendarEvent(data) {
+      return isValidId(data.familyId) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.description is string && data.description.size() <= 400 &&
+             data.location is string && data.location.size() <= 150 &&
+             data.dateEpochMillis is int && data.dateEpochMillis > 0 &&
+             data.startTime is string && data.startTime.size() >= 3 && data.startTime.size() <= 10 &&
+             data.endTime is string && data.endTime.size() >= 3 && data.endTime.size() <= 10 &&
+             data.assignedMemberName is string && data.assignedMemberName.size() >= 1 && data.assignedMemberName.size() <= 40 &&
+             data.memberColorHex is string && data.memberColorHex.size() >= 4 && data.memberColorHex.size() <= 16 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 30 &&
+             data.reminderMinutesBefore is int && data.reminderMinutesBefore >= 0 && data.reminderMinutesBefore <= 10080 &&
+             data.notified is bool &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isValidUidList(data.memberUids);
+    }
+
+    function isValidFamilyTask(data) {
+      return isValidId(data.familyId) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.description is string && data.description.size() <= 400 &&
+             data.assignedMemberName is string && data.assignedMemberName.size() >= 1 && data.assignedMemberName.size() <= 40 &&
+             data.assignedMemberEmoji is string && data.assignedMemberEmoji.size() >= 1 && data.assignedMemberEmoji.size() <= 16 &&
+             data.dueDate is string && data.dueDate.size() >= 1 && data.dueDate.size() <= 40 &&
+             data.priority in ['ALTA', 'MEDIA', 'BAJA'] &&
+             data.completed is bool &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 40 &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isValidUidList(data.memberUids);
+    }
+
+    function isValidMealPlan(data) {
+      return isValidId(data.familyId) &&
+             data.dayOfWeekIndex is int && data.dayOfWeekIndex >= 0 && data.dayOfWeekIndex <= 6 &&
+             data.mealType in ['DESAYUNO', 'COMIDA', 'MERIENDA', 'CENA'] &&
+             data.dishName is string && data.dishName.size() >= 1 && data.dishName.size() <= 120 &&
+             (!('recipeId' in data) || isValidId(data.recipeId)) &&
+             data.notes is string && data.notes.size() <= 300 &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isValidUidList(data.memberUids);
+    }
+
+    function isValidRecipe(data) {
+      return isValidId(data.familyId) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 60 &&
+             data.prepTimeMinutes is int && data.prepTimeMinutes >= 1 && data.prepTimeMinutes <= 1440 &&
+             data.servings is int && data.servings >= 1 && data.servings <= 50 &&
+             data.ingredients is string && data.ingredients.size() <= 3000 &&
+             data.instructions is string && data.instructions.size() <= 5000 &&
+             data.emoji is string && data.emoji.size() >= 1 && data.emoji.size() <= 16 &&
+             data.favorite is bool &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isValidUidList(data.memberUids);
+    }
+
+    // --- COLLECTION RULES ---
+
+    match /users/{userId} {
+      allow get, list: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().uid == request.auth.uid &&
+                       incoming().keys().hasAll(['uid', 'displayName', 'avatarEmoji', 'colorHex', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['uid', 'displayName', 'email', 'familyId', 'avatarEmoji', 'colorHex', 'createdAt', 'updatedAt']) &&
+                       isValidTimestamp(incoming().createdAt) &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       isValidUserProfile(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserProfile(incoming()) &&
+                       incoming().uid == existing().uid &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'familyId', 'avatarEmoji', 'colorHex', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    match /inviteCodes/{code} {
+      // Exact code lookup allowed for signed-in users; listing forbidden to prevent scraping
+      allow get: if isSignedIn() && isValidCode(code);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidCode(code) &&
+                       incoming().keys().hasAll(['familyId', 'familyName', 'ownerUid', 'createdAt']) &&
+                       incoming().keys().hasOnly(['familyId', 'familyName', 'ownerUid', 'createdAt']) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       isValidTimestamp(incoming().createdAt) &&
+                       isValidInviteCode(incoming()) &&
+                       existsAfter(/databases/$(database)/documents/families/$(incoming().familyId));
+
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidCode(code) && existing().ownerUid == request.auth.uid;
+    }
+
+    match /families/{familyId} {
+      allow get: if isSignedIn() && isValidId(familyId) && request.auth.uid in existing().memberUids;
+      allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(familyId) &&
+                       incoming().keys().hasAll(['name', 'inviteCode', 'ownerUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['name', 'inviteCode', 'ownerUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().memberUids.size() == 1 &&
+                       request.auth.uid in incoming().memberUids &&
+                       isValidTimestamp(incoming().createdAt) &&
+                       isValidTimestamp(incoming().updatedAt) &&
+                       isValidFamilyUnit(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(familyId) &&
+                       isValidFamilyUnit(incoming()) &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().inviteCode == existing().inviteCode &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidTimestamp(incoming().updatedAt) && (
+                         // Action: Owner renames family
+                         (request.auth.uid == existing().ownerUid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'updatedAt'])) ||
+                         // Action: Partner joins family (adds only self to memberUids)
+                         (!(request.auth.uid in existing().memberUids) &&
+                          incoming().memberUids.hasAll(existing().memberUids) &&
+                          incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                          request.auth.uid in incoming().memberUids &&
+                          exists(/databases/$(database)/documents/inviteCodes/$(existing().inviteCode)) &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt'])) ||
+                         // Action: Non-owner leaves family
+                         (request.auth.uid in existing().memberUids &&
+                          request.auth.uid != existing().ownerUid &&
+                          existing().memberUids.hasAll(incoming().memberUids) &&
+                          incoming().memberUids.size() == existing().memberUids.size() - 1 &&
+                          !(request.auth.uid in incoming().memberUids) &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                       );
+
+      allow delete: if isSignedIn() && isValidId(familyId) && existing().ownerUid == request.auth.uid;
+
+      // --- SUBCOLLECTIONS UNDER /families/{familyId} ---
+
+      match /members/{memberId} {
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+        allow get: if isSignedIn() && isValidId(memberId) && (request.auth.uid in existing().memberUids || isFamilyMemberDoc(familyId));
+
+        allow create: if isSignedIn() &&
+                         isValidId(memberId) &&
+                         incoming().keys().hasAll(['familyId', 'name', 'role', 'avatarEmoji', 'colorHex', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'linkedUid', 'name', 'role', 'avatarEmoji', 'colorHex', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().familyId == familyId &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidFamilyMember(incoming()) &&
+                         isFamilyMemberAfter(familyId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(memberId) &&
+                         isValidFamilyMember(incoming()) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isFamilyMemberDoc(familyId) && (
+                           (incoming().memberUids == existing().memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'avatarEmoji', 'colorHex', 'linkedUid', 'updatedAt'])) ||
+                           (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(memberId) && isFamilyMemberDoc(familyId);
+      }
+
+      match /shoppingItems/{itemId} {
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+        allow get: if isSignedIn() && isValidId(itemId) && (request.auth.uid in existing().memberUids || isFamilyMemberDoc(familyId));
+
+        allow create: if isSignedIn() &&
+                         isValidId(itemId) &&
+                         incoming().keys().hasAll(['familyId', 'name', 'quantity', 'unit', 'supermarket', 'priority', 'hasOffer', 'offerDetails', 'category', 'checked', 'addedByMemberName', 'notes', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'name', 'quantity', 'unit', 'supermarket', 'priority', 'hasOffer', 'offerDetails', 'category', 'checked', 'addedByMemberName', 'notes', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().familyId == familyId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidShoppingItem(incoming()) &&
+                         isFamilyMemberAfter(familyId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(itemId) &&
+                         isValidShoppingItem(incoming()) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isFamilyMemberDoc(familyId) && (
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['checked', 'updatedAt'])) ||
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['quantity', 'updatedAt'])) ||
+                           (incoming().memberUids == existing().memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'quantity', 'unit', 'supermarket', 'priority', 'hasOffer', 'offerDetails', 'category', 'checked', 'addedByMemberName', 'notes', 'updatedAt'])) ||
+                           (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(itemId) && isFamilyMemberDoc(familyId);
+      }
+
+      match /customLists/{listId} {
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+        allow get: if isSignedIn() && isValidId(listId) && (request.auth.uid in existing().memberUids || isFamilyMemberDoc(familyId));
+
+        allow create: if isSignedIn() &&
+                         isValidId(listId) &&
+                         incoming().keys().hasAll(['familyId', 'title', 'emoji', 'colorHex', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'title', 'emoji', 'colorHex', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().familyId == familyId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidCustomList(incoming()) &&
+                         isFamilyMemberAfter(familyId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(listId) &&
+                         isValidCustomList(incoming()) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isFamilyMemberDoc(familyId) && (
+                           (incoming().memberUids == existing().memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'emoji', 'colorHex', 'updatedAt'])) ||
+                           (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(listId) && isFamilyMemberDoc(familyId);
+      }
+
+      match /customListItems/{itemId} {
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+        allow get: if isSignedIn() && isValidId(itemId) && (request.auth.uid in existing().memberUids || isFamilyMemberDoc(familyId));
+
+        allow create: if isSignedIn() &&
+                         isValidId(itemId) &&
+                         incoming().keys().hasAll(['familyId', 'listId', 'title', 'quantity', 'notes', 'assignedMemberName', 'checked', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'listId', 'title', 'quantity', 'notes', 'assignedMemberName', 'checked', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().familyId == familyId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidCustomListItem(incoming()) &&
+                         isFamilyMemberAfter(familyId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(itemId) &&
+                         isValidCustomListItem(incoming()) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().listId == existing().listId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isFamilyMemberDoc(familyId) && (
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['checked', 'updatedAt'])) ||
+                           (incoming().memberUids == existing().memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'quantity', 'notes', 'assignedMemberName', 'checked', 'updatedAt'])) ||
+                           (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(itemId) && isFamilyMemberDoc(familyId);
+      }
+
+      match /calendarEvents/{eventId} {
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+        allow get: if isSignedIn() && isValidId(eventId) && (request.auth.uid in existing().memberUids || isFamilyMemberDoc(familyId));
+
+        allow create: if isSignedIn() &&
+                         isValidId(eventId) &&
+                         incoming().keys().hasAll(['familyId', 'title', 'description', 'location', 'dateEpochMillis', 'startTime', 'endTime', 'assignedMemberName', 'memberColorHex', 'category', 'reminderMinutesBefore', 'notified', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'title', 'description', 'location', 'dateEpochMillis', 'startTime', 'endTime', 'assignedMemberName', 'memberColorHex', 'category', 'reminderMinutesBefore', 'notified', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().familyId == familyId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidCalendarEvent(incoming()) &&
+                         isFamilyMemberAfter(familyId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(eventId) &&
+                         isValidCalendarEvent(incoming()) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isFamilyMemberDoc(familyId) && (
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['notified', 'updatedAt'])) ||
+                           (incoming().memberUids == existing().memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'location', 'dateEpochMillis', 'startTime', 'endTime', 'assignedMemberName', 'memberColorHex', 'category', 'reminderMinutesBefore', 'notified', 'updatedAt'])) ||
+                           (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(eventId) && isFamilyMemberDoc(familyId);
+      }
+
+      match /tasks/{taskId} {
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+        allow get: if isSignedIn() && isValidId(taskId) && (request.auth.uid in existing().memberUids || isFamilyMemberDoc(familyId));
+
+        allow create: if isSignedIn() &&
+                         isValidId(taskId) &&
+                         incoming().keys().hasAll(['familyId', 'title', 'description', 'assignedMemberName', 'assignedMemberEmoji', 'dueDate', 'priority', 'completed', 'category', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'title', 'description', 'assignedMemberName', 'assignedMemberEmoji', 'dueDate', 'priority', 'completed', 'category', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().familyId == familyId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidFamilyTask(incoming()) &&
+                         isFamilyMemberAfter(familyId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(taskId) &&
+                         isValidFamilyTask(incoming()) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isFamilyMemberDoc(familyId) && (
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['completed', 'updatedAt'])) ||
+                           (incoming().memberUids == existing().memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'assignedMemberName', 'assignedMemberEmoji', 'dueDate', 'priority', 'completed', 'category', 'updatedAt'])) ||
+                           (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(taskId) && isFamilyMemberDoc(familyId);
+      }
+
+      match /mealPlans/{mealPlanId} {
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+        allow get: if isSignedIn() && isValidId(mealPlanId) && (request.auth.uid in existing().memberUids || isFamilyMemberDoc(familyId));
+
+        allow create: if isSignedIn() &&
+                         isValidId(mealPlanId) &&
+                         incoming().keys().hasAll(['familyId', 'dayOfWeekIndex', 'mealType', 'dishName', 'notes', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'dayOfWeekIndex', 'mealType', 'dishName', 'recipeId', 'notes', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().familyId == familyId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidMealPlan(incoming()) &&
+                         isFamilyMemberAfter(familyId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(mealPlanId) &&
+                         isValidMealPlan(incoming()) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isFamilyMemberDoc(familyId) && (
+                           (incoming().memberUids == existing().memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['dayOfWeekIndex', 'mealType', 'dishName', 'recipeId', 'notes', 'updatedAt'])) ||
+                           (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(mealPlanId) && isFamilyMemberDoc(familyId);
+      }
+
+      match /recipes/{recipeId} {
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+        allow get: if isSignedIn() && isValidId(recipeId) && (request.auth.uid in existing().memberUids || isFamilyMemberDoc(familyId));
+
+        allow create: if isSignedIn() &&
+                         isValidId(recipeId) &&
+                         incoming().keys().hasAll(['familyId', 'title', 'category', 'prepTimeMinutes', 'servings', 'ingredients', 'instructions', 'emoji', 'favorite', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'title', 'category', 'prepTimeMinutes', 'servings', 'ingredients', 'instructions', 'emoji', 'favorite', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().familyId == familyId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidRecipe(incoming()) &&
+                         isFamilyMemberAfter(familyId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(recipeId) &&
+                         isValidRecipe(incoming()) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isFamilyMemberDoc(familyId) && (
+                           (incoming().diff(existing()).affectedKeys().hasOnly(['favorite', 'updatedAt'])) ||
+                           (incoming().memberUids == existing().memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'prepTimeMinutes', 'servings', 'ingredients', 'instructions', 'emoji', 'favorite', 'updatedAt'])) ||
+                           (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(recipeId) && isFamilyMemberDoc(familyId);
+      }
+    }
+  }
+}

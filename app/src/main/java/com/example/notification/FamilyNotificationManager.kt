@@ -11,7 +11,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
-import com.example.data.local.CalendarEventEntity
+import com.example.data.model.CalendarEvent
 
 class FamilyNotificationManager(private val context: Context) {
 
@@ -49,26 +49,27 @@ class FamilyNotificationManager(private val context: Context) {
         }
     }
 
-    fun showEventNotification(event: CalendarEventEntity) {
+    fun showEventNotification(event: CalendarEvent) {
         if (!hasNotificationPermission()) return
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
+        val notifId = (event.id.hashCode().takeIf { it != 0 } ?: 101) and 0x7FFFFFFF
         val pendingIntent = PendingIntent.getActivity(
             context,
-            event.id.toInt(),
+            notifId,
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("📅 Evento Próximo: ${event.title}")
-            .setContentText("${event.startTime} - ${event.endTime} · Asignado a: ${event.assignedMemberName}")
+            .setContentTitle("Evento próximo: ${event.title}")
+            .setContentText("${event.startTime} - ${event.endTime} · ${event.assignedMemberName}")
             .setStyle(
                 NotificationCompat.BigTextStyle().bigText(
-                    "📅 ${event.title}\n⏰ ${event.startTime} - ${event.endTime}\n👤 ${event.assignedMemberName}\n📍 ${if (event.location.isNotBlank()) event.location else "Sin ubicación específica"}\n📝 ${event.description}"
+                    "${event.title}\n${event.startTime} - ${event.endTime}\n${event.assignedMemberName}\n${if (event.location.isNotBlank()) event.location else "Sin ubicación específica"}\n${event.description}"
                 )
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -77,7 +78,7 @@ class FamilyNotificationManager(private val context: Context) {
             .build()
 
         try {
-            NotificationManagerCompat.from(context).notify(event.id.toInt().coerceAtLeast(1), notification)
+            NotificationManagerCompat.from(context).notify(notifId.coerceAtLeast(1), notification)
         } catch (_: SecurityException) {
             // Handled safely
         }

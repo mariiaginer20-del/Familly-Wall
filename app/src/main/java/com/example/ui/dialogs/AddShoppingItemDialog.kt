@@ -1,7 +1,5 @@
 package com.example.ui.dialogs
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,10 +23,8 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -49,8 +45,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.local.FamilyMemberEntity
+import com.example.data.model.FamilyMember
 import com.example.data.model.ItemPriority
+import com.example.data.model.ShoppingItem
 import com.example.data.model.Supermarket
 import com.example.ui.ShoppingItemDraft
 import com.example.ui.theme.ColorAlcampo
@@ -64,20 +61,31 @@ import com.example.ui.theme.PriorityUrgente
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddShoppingItemDialog(
-    members: List<FamilyMemberEntity>,
+    members: List<FamilyMember>,
+    initialItem: ShoppingItem? = null,
     onDismiss: () -> Unit,
     onSave: (ShoppingItemDraft) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var quantity by remember { mutableDoubleStateOf(1.0) }
-    var unit by remember { mutableStateOf("ud") }
-    var selectedSupermarket by remember { mutableStateOf(Supermarket.MERCADONA) }
-    var selectedPriority by remember { mutableStateOf(ItemPriority.NORMAL) }
-    var hasOffer by remember { mutableStateOf(false) }
-    var offerDetails by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("Despensa") }
-    var addedBy by remember { mutableStateOf(members.firstOrNull()?.name ?: "Mamá") }
-    var notes by remember { mutableStateOf("") }
+    var name by remember(initialItem) { mutableStateOf(initialItem?.name ?: "") }
+    var quantity by remember(initialItem) { mutableDoubleStateOf(initialItem?.quantity ?: 1.0) }
+    var unit by remember(initialItem) { mutableStateOf(initialItem?.unit ?: "ud") }
+    var selectedSupermarket by remember(initialItem) {
+        mutableStateOf(
+            initialItem?.let { Supermarket.fromString(it.supermarket) } ?: Supermarket.MERCADONA
+        )
+    }
+    var selectedPriority by remember(initialItem) {
+        mutableStateOf(
+            initialItem?.let { ItemPriority.fromString(it.priority) } ?: ItemPriority.NORMAL
+        )
+    }
+    var hasOffer by remember(initialItem) { mutableStateOf(initialItem?.hasOffer ?: false) }
+    var offerDetails by remember(initialItem) { mutableStateOf(initialItem?.offerDetails ?: "") }
+    var category by remember(initialItem) { mutableStateOf(initialItem?.category ?: "Despensa") }
+    var addedBy by remember(initialItem) {
+        mutableStateOf(initialItem?.addedByMemberName ?: members.firstOrNull()?.name ?: "Familia")
+    }
+    var notes by remember(initialItem) { mutableStateOf(initialItem?.notes ?: "") }
 
     val units = listOf("ud", "kg", "g", "L", "pack", "bote")
     val categories = listOf("Despensa", "Lácteos", "Frutas y Verduras", "Carnicería", "Pescadería", "Limpieza", "Panadería", "Bebidas", "Congelados")
@@ -93,7 +101,7 @@ fun AddShoppingItemDialog(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Añadir a la Compra",
+                    text = if (initialItem == null) "Añadir a la Compra" else "Editar Producto",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
             }
@@ -104,7 +112,6 @@ fun AddShoppingItemDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Name
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -117,7 +124,6 @@ fun AddShoppingItemDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Quantity & Unit
                 Text(
                     text = "Cantidad y unidad",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
@@ -161,7 +167,6 @@ fun AddShoppingItemDialog(
                         }
                     }
 
-                    // Unit selector pills
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         units.take(4).forEach { u ->
                             val isSelected = unit == u
@@ -186,7 +191,6 @@ fun AddShoppingItemDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Supermarket selector
                 Text(
                     text = "Supermercado",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
@@ -234,7 +238,6 @@ fun AddShoppingItemDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Priority: Normal, Urgente, Club
                 Text(
                     text = "Tipo / Prioridad",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
@@ -249,7 +252,7 @@ fun AddShoppingItemDialog(
                         val isSelected = selectedPriority == priority
                         val pColor = when (priority) {
                             ItemPriority.NORMAL -> PriorityNormal
-                            ItemPriority.URGENTE -> PriorityUargenteWrapper()
+                            ItemPriority.URGENTE -> PriorityUrgente
                             ItemPriority.CLUB -> PriorityClub
                         }
 
@@ -279,7 +282,38 @@ fun AddShoppingItemDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Offer Switch & Details
+                Text(
+                    text = "Categoría",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    categories.forEach { cat ->
+                        val isSelected = category == cat
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { category = cat }
+                        ) {
+                            Text(
+                                text = cat,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -287,7 +321,7 @@ fun AddShoppingItemDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "🏷️ ¿Está en oferta?",
+                            text = "¿Está en oferta?",
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
                         )
                         Text(
@@ -308,7 +342,7 @@ fun AddShoppingItemDialog(
                     OutlinedTextField(
                         value = offerDetails,
                         onValueChange = { offerDetails = it },
-                        label = { Text("Detalle de oferta (ej: 2x1, 50% en 2ª ud, Cupón app)") },
+                        label = { Text("Detalle de oferta (ej: 2x1, 50% en 2ª ud)") },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -316,39 +350,41 @@ fun AddShoppingItemDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Member who added
-                Text(
-                    text = "Añadido por:",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    members.forEach { m ->
-                        val isSelected = addedBy == m.name
-                        Surface(
-                            shape = CircleShape,
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .clickable { addedBy = m.name }
-                        ) {
-                            Text(
-                                text = "${m.avatarEmoji} ${m.name}",
-                                fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
+                if (members.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Añadido por:",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        members.forEach { m ->
+                            val isSelected = addedBy == m.name
+                            Surface(
+                                shape = CircleShape,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable { addedBy = m.name }
+                            ) {
+                                Text(
+                                    text = "${m.avatarEmoji} ${m.name}",
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Notes
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
@@ -381,7 +417,7 @@ fun AddShoppingItemDialog(
                 enabled = name.isNotBlank(),
                 modifier = Modifier.testTag("save_shopping_item_button")
             ) {
-                Text("Añadir a la lista")
+                Text(if (initialItem == null) "Añadir a la lista" else "Guardar cambios")
             }
         },
         dismissButton = {
@@ -391,5 +427,3 @@ fun AddShoppingItemDialog(
         }
     )
 }
-
-private fun PriorityUargenteWrapper(): Color = PriorityUrgente

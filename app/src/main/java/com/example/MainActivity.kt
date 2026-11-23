@@ -8,13 +8,17 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
@@ -30,6 +34,8 @@ import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -43,46 +49,243 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.credentials.CredentialManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.data.preferences.AppDesignStyle
+import com.example.data.preferences.AppearanceSettings
+import com.example.data.preferences.ThemeDarkMode
+import com.example.data.preferences.ThemePreferences
+import com.example.data.repository.FirestoreRepository
+import com.example.notification.FamilyNotificationManager
 import com.example.ui.FamilyWallViewModel
 import com.example.ui.MainTab
+import com.example.ui.UiState
+import com.example.ui.auth.authStateFlow
+import com.example.ui.auth.signOutWithCleanup
 import com.example.ui.components.FamilyHeader
 import com.example.ui.dialogs.AddCalendarEventDialog
 import com.example.ui.dialogs.AddRecipeDialog
 import com.example.ui.dialogs.AddShoppingItemDialog
 import com.example.ui.dialogs.AddTaskDialog
+import com.example.ui.dialogs.FamilySettingsDialog
+import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.CalendarScreen
+import com.example.ui.screens.FamilySetupScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.MealsScreen
 import com.example.ui.screens.ShoppingScreen
 import com.example.ui.screens.TasksScreen
 import com.example.ui.theme.FamilyWallTheme
+import com.google.firebase.Firebase
+import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.auth
+import com.google.firebase.firestore.firestore
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: FamilyWallViewModel by viewModels()
+    private lateinit var themePreferences: ThemePreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        themePreferences = ThemePreferences(applicationContext)
+
         setContent {
-            FamilyWallTheme {
-                MainApp(viewModel = viewModel)
+            val appearance by themePreferences.settingsFlow.collectAsStateWithLifecycle(
+                initialValue = AppearanceSettings()
+            )
+
+            FamilyWallTheme(
+                designStyle = appearance.designStyle,
+                darkMode = appearance.darkMode
+            ) {
+                AppNavigation(
+                    themePreferences = themePreferences,
+                    appearance = appearance
+                )
             }
         }
     }
 }
 
 @Composable
-fun MainApp(viewModel: FamilyWallViewModel) {
+fun AppNavigation(
+    themePreferences: ThemePreferences,
+    appearance: AppearanceSettings
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val credentialManager = remember { CredentialManager.create(context) }
+
+    val authUser by remember { Firebase.auth.authStateFlow() }
+        .collectAsStateWithLifecycle(initialValue = Firebase.auth.currentUser)
+
+    val uid = authUser?.uid
+    if (uid == null) {
+        AuthScreen(onAuthSuccess = {})
+        return
+    }
+
+    key(uid) {
+        val dbName = context.getString(R.string.firestore_database_id)
+        val viewModel: FamilyWallViewModel = viewModel(
+            key = uid,
+            factory = viewModelFactory {
+                initializer {
+                    val repo = FirestoreRepository(
+                        db = Firebase.firestore(dbName),
+                        auth = Firebase.auth
+                    )
+                    FamilyWallViewModel(
+                        repository = repo,
+                        themePreferences = themePreferences,
+                        notificationManager = FamilyNotificationManager(context.applicationContext),
+                        currentUserId = uid
+                    )
+                }
+            }
+        )
+
+        val userProfileState by viewModel.userProfileState.collectAsStateWithLifecycle()
+        val familyUnitState by viewModel.familyUnitState.collectAsStateWithLifecycle()
+
+        val onSignOut: () -> Unit = {
+            signOutWithCleanup(
+                credentialManager = credentialManager,
+                scope = scope,
+                onSignOutComplete = {}
+            )
+        }
+
+        when (val profileState = userProfileState) {
+            is UiState.Loading -> {
+                FullScreenStatus(message = "Cargando tu perfil familiar...")
+            }
+            is UiState.Error -> {
+                FullScreenError(
+                    message = profileState.message,
+                    onSignOut = onSignOut
+                )
+            }
+            is UiState.Success -> {
+                val profile = profileState.data
+                if (profile == null || profile.familyId.isNullOrBlank()) {
+                    FamilySetupScreen(
+                        viewModel = viewModel,
+                        defaultDisplayName = authUser?.displayName ?: "Yo",
+                        userEmail = authUser?.email,
+                        onSignOut = onSignOut
+                    )
+                } else {
+                    when (val famState = familyUnitState) {
+                        is UiState.Loading -> FullScreenStatus(message = "Sincronizando unidad familiar...")
+                        is UiState.Error -> FullScreenError(message = famState.message, onSignOut = onSignOut)
+                        is UiState.Success -> {
+                            val family = famState.data
+                            if (family == null) {
+                                FamilySetupScreen(
+                                    viewModel = viewModel,
+                                    defaultDisplayName = authUser?.displayName ?: "Yo",
+                                    userEmail = authUser?.email,
+                                    onSignOut = onSignOut
+                                )
+                            } else {
+                                MainApp(
+                                    viewModel = viewModel,
+                                    appearance = appearance,
+                                    onSignOut = onSignOut
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FullScreenStatus(message: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .safeDrawingPadding(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun FullScreenError(
+    message: String,
+    onSignOut: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .safeDrawingPadding()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "No se pudo conectar con tu hogar",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+            Button(onClick = onSignOut) {
+                Text("Volver a iniciar sesión")
+            }
+        }
+    }
+}
+
+@Composable
+fun MainApp(
+    viewModel: FamilyWallViewModel,
+    appearance: AppearanceSettings,
+    onSignOut: () -> Unit
+) {
     val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
+    val familyState by viewModel.familyUnitState.collectAsStateWithLifecycle()
+    val family = (familyState as? UiState.Success)?.data
     val members by viewModel.allMembers.collectAsStateWithLifecycle()
     val selectedMember by viewModel.selectedMemberFilter.collectAsStateWithLifecycle()
     val events by viewModel.allEvents.collectAsStateWithLifecycle()
@@ -90,10 +293,15 @@ fun MainApp(viewModel: FamilyWallViewModel) {
     val shoppingItems by viewModel.rawShoppingItems.collectAsStateWithLifecycle()
 
     val showAddShopping by viewModel.showAddShoppingDialog.collectAsStateWithLifecycle()
+    val editingShoppingItem by viewModel.editingShoppingItem.collectAsStateWithLifecycle()
     val showAddEvent by viewModel.showAddEventDialog.collectAsStateWithLifecycle()
+    val editingEvent by viewModel.editingEvent.collectAsStateWithLifecycle()
     val showAddTask by viewModel.showAddTaskDialog.collectAsStateWithLifecycle()
+    val editingTask by viewModel.editingTask.collectAsStateWithLifecycle()
     val showAddRecipe by viewModel.showAddRecipeDialog.collectAsStateWithLifecycle()
     val selectedDateMillis by viewModel.selectedCalendarDateMillis.collectAsStateWithLifecycle()
+
+    var showSettingsDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -116,6 +324,12 @@ fun MainApp(viewModel: FamilyWallViewModel) {
         }
     }
 
+    LaunchedEffect(viewModel) {
+        viewModel.snackbarEvents.collect { msg ->
+            snackbarHostState.showSnackbar(msg)
+        }
+    }
+
     val navItemColors = NavigationBarItemDefaults.colors(
         selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -131,10 +345,32 @@ fun MainApp(viewModel: FamilyWallViewModel) {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             FamilyHeader(
+                familyName = family?.name ?: "Family Wall",
+                inviteCode = family?.inviteCode,
                 members = members,
                 selectedMember = selectedMember,
                 onSelectMember = { viewModel.selectMemberFilter(it) },
                 pendingEventCount = events.size,
+                darkMode = appearance.darkMode,
+                onToggleStyleQuick = {
+                    val nextStyle = if (appearance.designStyle == AppDesignStyle.EDITORIAL) {
+                        AppDesignStyle.NORDIC_BENTO
+                    } else {
+                        AppDesignStyle.EDITORIAL
+                    }
+                    viewModel.setDesignStyle(nextStyle)
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Interfaz cambiada a ${nextStyle.title}")
+                    }
+                },
+                onToggleDarkModeQuick = {
+                    val nextMode = when (appearance.darkMode) {
+                        ThemeDarkMode.DARK -> ThemeDarkMode.LIGHT
+                        else -> ThemeDarkMode.DARK
+                    }
+                    viewModel.setDarkMode(nextMode)
+                },
+                onOpenSettings = { showSettingsDialog = true },
                 onNotificationClick = {
                     if (events.isNotEmpty()) {
                         viewModel.triggerEventNotification(events.first())
@@ -219,7 +455,7 @@ fun MainApp(viewModel: FamilyWallViewModel) {
                         modifier = Modifier.testTag("nav_tab_calendar")
                     )
 
-                    val pendingTasksCount = tasks.count { !it.isCompleted }
+                    val pendingTasksCount = tasks.count { !it.completed }
                     NavigationBarItem(
                         selected = currentTab == MainTab.TASKS,
                         onClick = { viewModel.selectTab(MainTab.TASKS) },
@@ -252,7 +488,7 @@ fun MainApp(viewModel: FamilyWallViewModel) {
                         modifier = Modifier.testTag("nav_tab_tasks")
                     )
 
-                    val pendingShoppingCount = shoppingItems.count { !it.isChecked }
+                    val pendingShoppingCount = shoppingItems.count { !it.checked }
                     NavigationBarItem(
                         selected = currentTab == MainTab.SHOPPING,
                         onClick = { viewModel.selectTab(MainTab.SHOPPING) },
@@ -270,13 +506,13 @@ fun MainApp(viewModel: FamilyWallViewModel) {
                             ) {
                                 Icon(
                                     if (currentTab == MainTab.SHOPPING) Icons.Filled.ShoppingCart else Icons.Outlined.ShoppingCart,
-                                    contentDescription = "Compra"
+                                    contentDescription = "Listas"
                                 )
                             }
                         },
                         label = {
                             Text(
-                                "Compra",
+                                "Listas",
                                 style = MaterialTheme.typography.labelMedium.copy(
                                     fontWeight = if (currentTab == MainTab.SHOPPING) FontWeight.Bold else FontWeight.Medium
                                 )
@@ -335,16 +571,42 @@ fun MainApp(viewModel: FamilyWallViewModel) {
         }
     }
 
+    if (showSettingsDialog) {
+        FamilySettingsDialog(
+            family = family,
+            members = members,
+            appearance = appearance,
+            currentUserId = viewModel.currentUserId,
+            onSelectDesignStyle = { viewModel.setDesignStyle(it) },
+            onSelectDarkMode = { viewModel.setDarkMode(it) },
+            onAddDependentMember = { name, role, emoji, color ->
+                viewModel.addDependentMember(name, role, emoji, color)
+            },
+            onLeaveFamily = {
+                showSettingsDialog = false
+                viewModel.leaveFamily()
+            },
+            onSignOut = {
+                showSettingsDialog = false
+                onSignOut()
+            },
+            onCodeCopied = {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Código copiado al portapapeles")
+                }
+            },
+            onDismiss = { showSettingsDialog = false }
+        )
+    }
+
     if (showAddShopping) {
         AddShoppingItemDialog(
             members = members,
+            initialItem = editingShoppingItem,
             onDismiss = { viewModel.setShowAddShoppingDialog(false) },
             onSave = { draft ->
-                viewModel.addShoppingItem(draft)
+                viewModel.saveShoppingItem(draft, editingShoppingItem)
                 viewModel.setShowAddShoppingDialog(false)
-                coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Añadido '${draft.name}' a la lista de compra")
-                }
             }
         )
     }
@@ -353,13 +615,11 @@ fun MainApp(viewModel: FamilyWallViewModel) {
         AddCalendarEventDialog(
             members = members,
             initialDateMillis = selectedDateMillis,
+            initialEvent = editingEvent,
             onDismiss = { viewModel.setShowAddEventDialog(false) },
             onSave = { draft ->
-                viewModel.addCalendarEvent(draft)
+                viewModel.saveCalendarEvent(draft, editingEvent)
                 viewModel.setShowAddEventDialog(false)
-                coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Evento '${draft.title}' programado y notificado")
-                }
             }
         )
     }
@@ -367,13 +627,11 @@ fun MainApp(viewModel: FamilyWallViewModel) {
     if (showAddTask) {
         AddTaskDialog(
             members = members,
+            initialTask = editingTask,
             onDismiss = { viewModel.setShowAddTaskDialog(false) },
             onSave = { draft ->
-                viewModel.addTask(draft)
+                viewModel.saveTask(draft, editingTask)
                 viewModel.setShowAddTaskDialog(false)
-                coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Tarea asignada a ${draft.assignedMemberName}")
-                }
             }
         )
     }
@@ -384,9 +642,6 @@ fun MainApp(viewModel: FamilyWallViewModel) {
             onSave = { draft ->
                 viewModel.addRecipe(draft)
                 viewModel.setShowAddRecipeDialog(false)
-                coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Receta '${draft.title}' guardada en el recetario")
-                }
             }
         )
     }

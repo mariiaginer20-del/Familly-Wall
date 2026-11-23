@@ -1,0 +1,252 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated Google user profile and active family unit reference.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "Display name" },
+        "email": { "type": "string", "description": "Optional email address" },
+        "familyId": { "type": "string", "description": "Optional active FamilyUnit document ID" },
+        "avatarEmoji": { "type": "string", "description": "Avatar emoji" },
+        "colorHex": { "type": "string", "description": "Hex accent color" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["uid", "displayName", "avatarEmoji", "colorHex", "createdAt", "updatedAt"]
+    },
+    "InviteCode": {
+      "title": "InviteCode",
+      "description": "Direct lookup mapping from 6-char uppercase family invite code to familyId.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "familyName": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "familyName", "ownerUid", "createdAt"]
+    },
+    "FamilyUnit": {
+      "title": "FamilyUnit",
+      "description": "Shared family household container holding invite code and member UIDs.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "inviteCode": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "inviteCode", "ownerUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "FamilyMember": {
+      "title": "FamilyMember",
+      "description": "Family member profile (account-linked or dependent child/member).",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "linkedUid": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "avatarEmoji": { "type": "string" },
+        "colorHex": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "name", "role", "avatarEmoji", "colorHex", "memberUids", "createdAt", "updatedAt"]
+    },
+    "ShoppingItem": {
+      "title": "ShoppingItem",
+      "description": "Grocery list item with supermarket, quantity, priority, and offer notes.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "name": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string" },
+        "supermarket": { "type": "string" },
+        "priority": { "type": "string", "enum": ["NORMAL", "URGENTE", "CLUB"] },
+        "hasOffer": { "type": "boolean" },
+        "offerDetails": { "type": "string" },
+        "category": { "type": "string" },
+        "checked": { "type": "boolean" },
+        "addedByMemberName": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "name", "quantity", "unit", "supermarket", "priority", "hasOffer", "offerDetails", "category", "checked", "addedByMemberName", "notes", "createdByUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "CustomList": {
+      "title": "CustomList",
+      "description": "General-purpose shared list (packing, pharmacy, home repairs, etc.).",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "title": { "type": "string" },
+        "emoji": { "type": "string" },
+        "colorHex": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "title", "emoji", "colorHex", "createdByUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "CustomListItem": {
+      "title": "CustomListItem",
+      "description": "Item belonging to a general-purpose CustomList.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "listId": { "type": "string" },
+        "title": { "type": "string" },
+        "quantity": { "type": "string" },
+        "notes": { "type": "string" },
+        "assignedMemberName": { "type": "string" },
+        "checked": { "type": "boolean" },
+        "createdByUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "listId", "title", "quantity", "notes", "assignedMemberName", "checked", "createdByUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "CalendarEvent": {
+      "title": "CalendarEvent",
+      "description": "Shared family calendar event with date, time range, member assignment, and reminder.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "location": { "type": "string" },
+        "dateEpochMillis": { "type": "integer" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "assignedMemberName": { "type": "string" },
+        "memberColorHex": { "type": "string" },
+        "category": { "type": "string" },
+        "reminderMinutesBefore": { "type": "integer" },
+        "notified": { "type": "boolean" },
+        "createdByUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "title", "description", "location", "dateEpochMillis", "startTime", "endTime", "assignedMemberName", "memberColorHex", "category", "reminderMinutesBefore", "notified", "createdByUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "FamilyTask": {
+      "title": "FamilyTask",
+      "description": "Shared household task assigned to a family member.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "assignedMemberName": { "type": "string" },
+        "assignedMemberEmoji": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "priority": { "type": "string", "enum": ["ALTA", "MEDIA", "BAJA"] },
+        "completed": { "type": "boolean" },
+        "category": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "title", "description", "assignedMemberName", "assignedMemberEmoji", "dueDate", "priority", "completed", "category", "createdByUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "MealPlan": {
+      "title": "MealPlan",
+      "description": "Weekly meal planner slot for a day index (0..6) and meal type.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "dayOfWeekIndex": { "type": "integer" },
+        "mealType": { "type": "string", "enum": ["DESAYUNO", "COMIDA", "MERIENDA", "CENA"] },
+        "dishName": { "type": "string" },
+        "recipeId": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "dayOfWeekIndex", "mealType", "dishName", "notes", "createdByUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "Recipe": {
+      "title": "Recipe",
+      "description": "Shared family recipe with ingredients, preparation steps, and favorite flag.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "prepTimeMinutes": { "type": "integer" },
+        "servings": { "type": "integer" },
+        "ingredients": { "type": "string" },
+        "instructions": { "type": "string" },
+        "emoji": { "type": "string" },
+        "favorite": { "type": "boolean" },
+        "createdByUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "title", "category", "prepTimeMinutes", "servings", "ingredients", "instructions", "emoji", "favorite", "createdByUid", "memberUids", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Authenticated user profile and active family link."
+    },
+    "/inviteCodes/{code}": {
+      "schema": { "$ref": "#/entities/InviteCode" },
+      "description": "Lookup index from invite code to family unit."
+    },
+    "/families/{familyId}": {
+      "schema": { "$ref": "#/entities/FamilyUnit" },
+      "description": "Family household unit metadata and member UID allowlist."
+    },
+    "/families/{familyId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/FamilyMember" },
+      "description": "Family members (account holders and dependents)."
+    },
+    "/families/{familyId}/shoppingItems/{itemId}": {
+      "schema": { "$ref": "#/entities/ShoppingItem" },
+      "description": "Shared family shopping list items."
+    },
+    "/families/{familyId}/customLists/{listId}": {
+      "schema": { "$ref": "#/entities/CustomList" },
+      "description": "General-purpose shared family lists."
+    },
+    "/families/{familyId}/customListItems/{itemId}": {
+      "schema": { "$ref": "#/entities/CustomListItem" },
+      "description": "Items belonging to general-purpose shared lists."
+    },
+    "/families/{familyId}/calendarEvents/{eventId}": {
+      "schema": { "$ref": "#/entities/CalendarEvent" },
+      "description": "Shared family calendar events."
+    },
+    "/families/{familyId}/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/FamilyTask" },
+      "description": "Shared family tasks."
+    },
+    "/families/{familyId}/mealPlans/{mealPlanId}": {
+      "schema": { "$ref": "#/entities/MealPlan" },
+      "description": "Weekly family meal plans."
+    },
+    "/families/{familyId}/recipes/{recipeId}": {
+      "schema": { "$ref": "#/entities/Recipe" },
+      "description": "Shared family recipe book."
+    }
+  }
+}

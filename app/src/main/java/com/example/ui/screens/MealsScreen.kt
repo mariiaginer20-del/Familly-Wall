@@ -68,13 +68,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.local.MealPlanEntity
-import com.example.data.local.RecipeEntity
+import com.example.data.model.MealPlan
 import com.example.data.model.MealType
+import com.example.data.model.Recipe
 import com.example.data.model.Supermarket
 import com.example.ui.FamilyWallViewModel
 import com.example.ui.dialogs.AddRecipeDialog
-import com.example.ui.theme.FamilySecondary
 import java.util.Calendar
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -99,14 +98,14 @@ fun MealsScreen(
 
     var editingSlot by remember { mutableStateOf<Pair<Int, MealType>?>(null) }
     var editingDishName by remember { mutableStateOf("") }
-    var editingLinkedRecipeId by remember { mutableStateOf<Long?>(null) }
+    var editingLinkedRecipeId by remember { mutableStateOf<String?>(null) }
 
     var recipeSearchQuery by remember { mutableStateOf("") }
     var selectedRecipeFilter by remember { mutableStateOf("Todas") }
-    var selectedRecipeForDetails by remember { mutableStateOf<RecipeEntity?>(null) }
-    var recipeToEdit by remember { mutableStateOf<RecipeEntity?>(null) }
-    var recipeToTransfer by remember { mutableStateOf<Pair<RecipeEntity, List<String>?>?>(null) }
-    var recipeToAssignToPlan by remember { mutableStateOf<RecipeEntity?>(null) }
+    var selectedRecipeForDetails by remember { mutableStateOf<Recipe?>(null) }
+    var recipeToEdit by remember { mutableStateOf<Recipe?>(null) }
+    var recipeToTransfer by remember { mutableStateOf<Pair<Recipe, List<String>?>?>(null) }
+    var recipeToAssignToPlan by remember { mutableStateOf<Recipe?>(null) }
     var feedbackMessage by remember { mutableStateOf<String?>(null) }
 
     val recipeCategories = remember(recipes) {
@@ -117,7 +116,7 @@ fun MealsScreen(
         recipes.filter { r ->
             val matchesFilter = when (selectedRecipeFilter) {
                 "Todas" -> true
-                "Favoritas" -> r.isFavorite
+                "Favoritas" -> r.favorite
                 else -> r.category.equals(selectedRecipeFilter, ignoreCase = true)
             }
             val matchesQuery = recipeSearchQuery.isBlank() ||
@@ -990,8 +989,8 @@ fun MealsScreen(
 fun WeeklyDayCard(
     dayName: String,
     isToday: Boolean,
-    dayMeals: List<MealPlanEntity>,
-    onSlotClick: (MealType, String, Long?) -> Unit
+    dayMeals: List<MealPlan>,
+    onSlotClick: (MealType, String, String?) -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1155,7 +1154,7 @@ fun MealSlotCard(
 
 @Composable
 fun RecipeCard(
-    recipe: RecipeEntity,
+    recipe: Recipe,
     onOpen: () -> Unit,
     onToggleFavorite: () -> Unit,
     onAddToShopping: () -> Unit
@@ -1202,9 +1201,9 @@ fun RecipeCard(
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
-                        imageVector = if (recipe.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        imageVector = if (recipe.favorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                         contentDescription = "Favorita",
-                        tint = if (recipe.isFavorite) FamilySecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = if (recipe.favorite) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp)
                     )
                 }

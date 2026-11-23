@@ -37,13 +37,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.local.RecipeEntity
+import com.example.data.model.Recipe
 import com.example.ui.RecipeDraft
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddRecipeDialog(
-    initialRecipe: RecipeEntity? = null,
+    initialRecipe: Recipe? = null,
     onDismiss: () -> Unit,
     onSave: (RecipeDraft) -> Unit
 ) {
