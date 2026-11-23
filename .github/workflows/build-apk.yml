@@ -7,6 +7,9 @@ on:
     branches: [ "**" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     name: Generar APK Debug
@@ -60,9 +63,27 @@ jobs:
       - name: Compilar APK (assembleDebug)
         run: gradle assembleDebug --no-daemon
 
+      - name: Preparar APK para descarga directa
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          cp "$APK_PATH" FamilyWall-debug.apk
+          ls -lh FamilyWall-debug.apk
+
       - name: Subir APK como Artifact descargable
         uses: actions/upload-artifact@v4
         with:
           name: FamilyWall-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: FamilyWall-debug.apk
           if-no-files-found: error
+
+      - name: Publicar APK en GitHub Releases
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Family Wall v1.0.${{ github.run_number }}
+          body: "APK compilado automáticamente. Descarga **FamilyWall-debug.apk** directamente sin descomprimir."
+          files: FamilyWall-debug.apk
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
