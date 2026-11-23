@@ -38,10 +38,15 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Preparar keystore y variables de entorno
+      - name: Preparar keystore, google-services.json y variables
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
           if [ ! -f debug.keystore ]; then
-            if [ -f debug.keystore.base64 ]; then
+            if [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+              echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > debug.keystore
+            elif [ -f debug.keystore.base64 ]; then
               base64 -d debug.keystore.base64 > debug.keystore
             else
               keytool -genkeypair -v \
@@ -56,12 +61,29 @@ jobs:
             fi
           fi
           ls -lh debug.keystore
+
+          if [ ! -f app/google-services.json ] && [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            TRIMMED=$(echo "$GOOGLE_SERVICES_JSON" | tr -d '[:space:]')
+            if [[ "$TRIMMED" == \{* ]]; then
+              printf '%s\n' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+            else
+              echo "$GOOGLE_SERVICES_JSON" | base64 -d > app/google-services.json
+            fi
+          fi
+
+          if [ ! -f app/google-services.json ]; then
+            echo "::error::Falta app/google-services.json en el repositorio de GitHub."
+            echo "AI Studio no sube google-services.json automáticamente al hacer Push a GitHub."
+            echo "Solución: crea el secreto GOOGLE_SERVICES_JSON en GitHub (Settings -> Secrets and variables -> Actions) con el contenido de app/google-services.json, o súbelo manualmente a la carpeta app/ del repositorio."
+            exit 1
+          fi
+
           if [ ! -f .env ] && [ -f .env.example ]; then
             cp .env.example .env
           fi
 
       - name: Compilar APK (assembleDebug)
-        run: gradle assembleDebug --no-daemon
+        run: gradle assembleDebug --no-daemon --no-build-cache
 
       - name: Preparar APK para descarga directa
         run: |
