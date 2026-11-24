@@ -203,6 +203,17 @@ service cloud.firestore {
              isValidUidList(data.memberUids);
     }
 
+    function isValidPetFeedingStatus(data) {
+      return isValidId(data.familyId) &&
+             data.petName is string && data.petName.size() >= 1 && data.petName.size() <= 40 &&
+             data.dateKey is string && data.dateKey.size() == 10 && data.dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+             data.fed is bool &&
+             data.fedByMemberName is string && data.fedByMemberName.size() <= 40 &&
+             data.fedTimeLabel is string && data.fedTimeLabel.size() <= 16 &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isValidUidList(data.memberUids);
+    }
+
     // --- COLLECTION RULES ---
 
     match /users/{userId} {
@@ -222,8 +233,9 @@ service cloud.firestore {
                        isValidId(userId) &&
                        request.auth.uid == userId &&
                        isValidUserProfile(incoming()) &&
-                       incoming().uid == existing().uid &&
-                       incoming().createdAt == existing().createdAt &&
+                       incoming().uid == request.auth.uid &&
+                       (!('uid' in existing()) || incoming().uid == existing().uid) &&
+                       (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt) &&
                        isValidTimestamp(incoming().updatedAt) &&
                        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'familyId', 'avatarEmoji', 'colorHex', 'updatedAt']);
 
@@ -268,15 +280,17 @@ service cloud.firestore {
                        isValidFamilyUnit(incoming()) &&
                        incoming().ownerUid == existing().ownerUid &&
                        incoming().inviteCode == existing().inviteCode &&
-                       incoming().createdAt == existing().createdAt &&
+                       (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt) &&
                        isValidTimestamp(incoming().updatedAt) && (
                          // Action: Owner renames family
                          (request.auth.uid == existing().ownerUid &&
                           incoming().diff(existing()).affectedKeys().hasOnly(['name', 'updatedAt'])) ||
-                         // Action: Partner joins family (adds only self to memberUids)
-                         (!(request.auth.uid in existing().memberUids) &&
-                          incoming().memberUids.hasAll(existing().memberUids) &&
-                          incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                         // Action: Partner joins family (adds self to memberUids, or idempotently re-joins if already listed)
+                         (((!(request.auth.uid in existing().memberUids) &&
+                            incoming().memberUids.hasAll(existing().memberUids) &&
+                            incoming().memberUids.size() == existing().memberUids.size() + 1) ||
+                           (request.auth.uid in existing().memberUids &&
+                            incoming().memberUids == existing().memberUids)) &&
                           request.auth.uid in incoming().memberUids &&
                           exists(/databases/$(database)/documents/inviteCodes/$(existing().inviteCode)) &&
                           incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt'])) ||
@@ -312,13 +326,13 @@ service cloud.firestore {
                          isValidId(memberId) &&
                          isValidFamilyMember(incoming()) &&
                          incoming().familyId == existing().familyId &&
-                         incoming().createdAt == existing().createdAt &&
+                         (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt) &&
                          isValidTimestamp(incoming().updatedAt) &&
                          isFamilyMemberDoc(familyId) && (
                            (incoming().memberUids == existing().memberUids &&
                             incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'avatarEmoji', 'colorHex', 'linkedUid', 'updatedAt'])) ||
                            (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
-                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'avatarEmoji', 'colorHex', 'linkedUid', 'memberUids', 'updatedAt']))
                          );
 
         allow delete: if isSignedIn() && isValidId(memberId) && isFamilyMemberDoc(familyId);
@@ -622,6 +636,39 @@ service cloud.firestore {
                          isFamilyMemberDoc(familyId) && (
                            (incoming().memberUids == existing().memberUids &&
                             incoming().diff(existing()).affectedKeys().hasOnly(['name', 'nameLower', 'lastUnit', 'lastCategory', 'lastSupermarket', 'useCount', 'updatedAt'])) ||
+                           (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(entryId) && isFamilyMemberDoc(familyId);
+      }
+
+      match /petCare/{entryId} {
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+        allow get: if isSignedIn() && isValidId(entryId) && (request.auth.uid in existing().memberUids || isFamilyMemberDoc(familyId));
+
+        allow create: if isSignedIn() &&
+                         isValidId(entryId) &&
+                         incoming().keys().hasAll(['familyId', 'petName', 'dateKey', 'fed', 'fedByMemberName', 'fedTimeLabel', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'petName', 'dateKey', 'fed', 'fedByMemberName', 'fedTimeLabel', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().familyId == familyId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidPetFeedingStatus(incoming()) &&
+                         isFamilyMemberAfter(familyId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(entryId) &&
+                         isValidPetFeedingStatus(incoming()) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isFamilyMemberDoc(familyId) && (
+                           (incoming().memberUids == existing().memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['petName', 'dateKey', 'fed', 'fedByMemberName', 'fedTimeLabel', 'updatedAt'])) ||
                            (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
                             incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
                          );

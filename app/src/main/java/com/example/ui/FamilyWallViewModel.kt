@@ -14,6 +14,7 @@ import com.example.data.model.FamilyUnit
 import com.example.data.model.ItemPriority
 import com.example.data.model.MealPlan
 import com.example.data.model.MealType
+import com.example.data.model.PetFeedingStatus
 import com.example.data.model.ProductHistoryEntry
 import com.example.data.model.Recipe
 import com.example.data.model.ShoppingItem
@@ -379,6 +380,11 @@ class FamilyWallViewModel(
 
     val productHistory: StateFlow<List<ProductHistoryEntry>> =
         observeFamilySubcollection("historial de productos") { repository.observeProductHistory(it) }
+
+    val petFeedingStatus: StateFlow<PetFeedingStatus?> =
+        observeFamilySubcollection("comida de Oliva") { repository.observePetFeeding(it) }
+            .map { entries -> entries.firstOrNull { it.id == "oliva_feeding" } ?: entries.firstOrNull() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), null)
 
     val rawShoppingItems: StateFlow<List<ShoppingItem>> =
         observeFamilySubcollection("compra") { repository.observeShoppingItems(it) }
@@ -878,5 +884,32 @@ class FamilyWallViewModel(
     fun formatEventDate(epochMillis: Long): String {
         val sdf = SimpleDateFormat("EEEE, d 'de' MMMM", Locale("es", "ES"))
         return sdf.format(Date(epochMillis)).replaceFirstChar { it.uppercase() }
+    }
+
+    // --- OLIVA DAILY FEEDING ---
+
+    fun toggleOlivaFedToday(currentlyFedToday: Boolean) {
+        val fam = currentFamily() ?: return
+        val now = Date()
+        val dateKey = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(now)
+        val timeLabel = SimpleDateFormat("HH:mm", Locale("es", "ES")).format(now)
+        val memberName = currentMemberDisplayName()
+        viewModelScope.launch {
+            repository.toggleOlivaFedToday(
+                familyId = fam.id,
+                memberUids = fam.memberUids,
+                memberName = memberName,
+                currentlyFedToday = currentlyFedToday,
+                dateKey = dateKey,
+                timeLabel = timeLabel
+            ).onSuccess { nowFed ->
+                emitMessage(
+                    if (nowFed) "¡Apuntado! Oliva ya ha comido hoy ($timeLabel)"
+                    else "Comida de Oliva marcada como pendiente"
+                )
+            }.onFailure {
+                emitMessage("No se pudo actualizar la comida de Oliva")
+            }
+        }
     }
 }

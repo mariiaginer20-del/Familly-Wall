@@ -179,6 +179,46 @@ test("Invite code lookup works by exact ID, listing inviteCodes is forbidden, pa
   // Now Bob can read families/fam_1, while outsider Eve still cannot
   await assertSucceeds(bobDb.collection("families").doc("fam_1").get());
   await assertFails(eveDb.collection("families").doc("fam_1").get());
+
+  // Idempotent re-join (e.g., if Bob is already in memberUids and re-submits invite code)
+  await assertSucceeds(
+    bobDb.collection("families").doc("fam_1").update({
+      memberUids: [ALICE_UID, BOB_UID],
+      updatedAt: past(),
+    })
+  );
+
+  // Re-join updating existing members/BOB_UID doc with profile fields + memberUids
+  await assertSucceeds(
+    bobDb.collection("families").doc("fam_1").collection("members").doc(BOB_UID).update({
+      name: "Bob Updated",
+      avatarEmoji: "🧑",
+      colorHex: "#2847D6",
+      memberUids: [ALICE_UID, BOB_UID],
+      updatedAt: past(),
+    })
+  );
+
+  // Bob leaves family and later re-joins cleanly
+  await assertSucceeds(
+    bobDb.collection("families").doc("fam_1").update({
+      memberUids: [ALICE_UID],
+      updatedAt: past(),
+    })
+  );
+  await assertSucceeds(
+    bobDb.collection("families").doc("fam_1").update({
+      memberUids: [ALICE_UID, BOB_UID],
+      updatedAt: past(),
+    })
+  );
+  // Outsider Eve cannot use the idempotent branch or sneak into memberUids without adding only herself
+  await assertFails(
+    eveDb.collection("families").doc("fam_1").update({
+      memberUids: [ALICE_UID, BOB_UID],
+      updatedAt: past(),
+    })
+  );
 });
 
 test("Empty and populated subcollection queries require memberUids array-contains filter", async () => {
@@ -403,4 +443,40 @@ test("Shopping items, tasks, custom lists, calendar events, meal plans, recipes 
     })
   );
   await assertSucceeds(histRef.update({ useCount: 2, updatedAt: past() }));
+
+  // 5. Pet feeding tracker (Oliva)
+  const petRef = aliceDb.collection("families").doc("fam_1").collection("petCare").doc("oliva_feeding");
+  await assertSucceeds(
+    petRef.set({
+      familyId: "fam_1",
+      petName: "Oliva",
+      dateKey: "2026-11-24",
+      fed: true,
+      fedByMemberName: "Alice",
+      fedTimeLabel: "09:15",
+      createdByUid: ALICE_UID,
+      memberUids: [ALICE_UID],
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await assertSucceeds(
+    petRef.update({
+      fed: false,
+      fedByMemberName: "",
+      fedTimeLabel: "",
+      updatedAt: past(),
+    })
+  );
+  await assertSucceeds(
+    aliceDb.collection("families").doc("fam_1").collection("petCare").where("memberUids", "array-contains", ALICE_UID).get()
+  );
+  await assertFails(petRef.update({ ghost: true, updatedAt: past() }));
+  const eveDb = testEnv.authenticatedContext(EVE_UID).firestore();
+  await assertFails(
+    eveDb.collection("families").doc("fam_1").collection("petCare").doc("oliva_feeding").update({
+      fed: false,
+      updatedAt: past(),
+    })
+  );
 });

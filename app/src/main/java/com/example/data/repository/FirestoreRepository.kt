@@ -12,6 +12,7 @@ import com.example.data.model.FamilyMember
 import com.example.data.model.FamilyTask
 import com.example.data.model.FamilyUnit
 import com.example.data.model.MealPlan
+import com.example.data.model.PetFeedingStatus
 import com.example.data.model.ProductHistoryEntry
 import com.example.data.model.Recipe
 import com.example.data.model.RecipeFormatters
@@ -350,10 +351,11 @@ class FirestoreRepository(
                 ?: return Result.failure(IllegalStateException("Código familiar inválido."))
 
             val familyRef = db.collection("families").document(familyId)
-            currentPath = familyRef.path
             val userRef = db.collection("users").document(uid)
+            currentPath = userRef.path
             val userSnap = userRef.get().await()
 
+            currentPath = "${familyRef.path} + ${userRef.path}"
             val batch = db.batch()
             batch.update(
                 familyRef,
@@ -362,17 +364,21 @@ class FirestoreRepository(
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             )
-            if (userSnap.exists()) {
-                batch.update(
-                    userRef,
-                    mapOf(
-                        "displayName" to cleanMember,
-                        "familyId" to familyId,
-                        "avatarEmoji" to avatarEmoji,
-                        "colorHex" to colorHex,
-                        "updatedAt" to FieldValue.serverTimestamp()
-                    )
+            if (userSnap.exists() &&
+                !userSnap.getString("uid").isNullOrBlank() &&
+                userSnap.getTimestamp("createdAt") != null
+            ) {
+                val updateMap = mutableMapOf<String, Any>(
+                    "displayName" to cleanMember,
+                    "familyId" to familyId,
+                    "avatarEmoji" to avatarEmoji,
+                    "colorHex" to colorHex,
+                    "updatedAt" to FieldValue.serverTimestamp()
                 )
+                auth.currentUser?.email?.takeIf { it.isNotBlank() && it.length <= 150 }?.let {
+                    updateMap["email"] = it
+                }
+                batch.update(userRef, updateMap)
             } else {
                 val userPayload = mutableMapOf<String, Any>(
                     "uid" to uid,
@@ -380,7 +386,7 @@ class FirestoreRepository(
                     "familyId" to familyId,
                     "avatarEmoji" to avatarEmoji,
                     "colorHex" to colorHex,
-                    "createdAt" to FieldValue.serverTimestamp(),
+                    "createdAt" to (userSnap.getTimestamp("createdAt") ?: FieldValue.serverTimestamp()),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
                 auth.currentUser?.email?.takeIf { it.isNotBlank() && it.length <= 150 }?.let {
@@ -391,11 +397,13 @@ class FirestoreRepository(
             batch.commit().await()
 
             // Now signed-in user is in families/{familyId}.memberUids; read full memberUids and register member card
+            currentPath = familyRef.path
             val updatedFamilySnap = familyRef.get().await()
             @Suppress("UNCHECKED_CAST")
             val memberUids = (updatedFamilySnap.get("memberUids") as? List<String>)?.take(15) ?: listOf(uid)
 
             val memberRef = familyRef.collection("members").document(uid)
+            currentPath = memberRef.path
             val existingMember = memberRef.get().await()
             if (existingMember.exists()) {
                 memberRef.update(
@@ -428,7 +436,14 @@ class FirestoreRepository(
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.WRITE, currentPath)
-            Result.failure(e)
+            val detailed = if (e is FirebaseFirestoreException &&
+                e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED
+            ) {
+                IllegalStateException("${e.localizedMessage ?: "PERMISSION_DENIED"} ($currentPath)", e)
+            } else {
+                e
+            }
+            Result.failure(detailed)
         }
     }
 
@@ -438,7 +453,7 @@ class FirestoreRepository(
             val uid = requireUserId()
             val userRef = db.collection("users").document(uid)
             val batch = db.batch()
-            if (family.ownerUid != uid) {
+            if (family.ownerUid != uid && uid in family.memberUids) {
                 batch.update(
                     db.collection("families").document(family.id),
                     mapOf(
@@ -482,7 +497,8 @@ class FirestoreRepository(
             "mealPlans",
             "recipes",
             "categories",
-            "productHistory"
+            "productHistory",
+            "petCare"
         )
         try {
             val refsToUpdate = mutableListOf<DocumentReference>()
@@ -1524,6 +1540,62 @@ class FirestoreRepository(
                 ).await()
             }
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
+    // --- PET CARE (OLIVA FEEDING) ---
+
+    fun observePetFeeding(familyId: String): Flow<List<PetFeedingStatus>> =
+        observeCollection(familyId, "petCare", PetFeedingStatus::class.java)
+
+    suspend fun toggleOlivaFedToday(
+        familyId: String,
+        memberUids: List<String>,
+        memberName: String,
+        currentlyFedToday: Boolean,
+        dateKey: String,
+        timeLabel: String
+    ): Result<Boolean> {
+        val docRef = db.collection("families").document(familyId).collection("petCare").document("oliva_feeding")
+        return try {
+            val uid = requireUserId()
+            val newFed = !currentlyFedToday
+            val cleanMember = memberName.trim().ifBlank { "Familia" }.take(40)
+            val cleanTime = timeLabel.trim().take(16)
+            val snap = docRef.get().await()
+            if (snap.exists()) {
+                docRef.update(
+                    mapOf(
+                        "petName" to "Oliva",
+                        "dateKey" to dateKey,
+                        "fed" to newFed,
+                        "fedByMemberName" to if (newFed) cleanMember else "",
+                        "fedTimeLabel" to if (newFed) cleanTime else "",
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } else {
+                docRef.set(
+                    mapOf(
+                        "familyId" to familyId,
+                        "petName" to "Oliva",
+                        "dateKey" to dateKey,
+                        "fed" to newFed,
+                        "fedByMemberName" to if (newFed) cleanMember else "",
+                        "fedTimeLabel" to if (newFed) cleanTime else "",
+                        "createdByUid" to uid,
+                        "memberUids" to memberUids,
+                        "createdAt" to FieldValue.serverTimestamp(),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+            Result.success(newFed)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
@@ -27,6 +31,11 @@ import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.ShoppingCart
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Pets
+import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +43,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -75,9 +85,13 @@ fun HomeScreen(
     val customLists by viewModel.customLists.collectAsStateWithLifecycle()
     val customListItems by viewModel.customListItems.collectAsStateWithLifecycle()
     val meals by viewModel.allMealPlans.collectAsStateWithLifecycle()
+    val olivaStatus by viewModel.petFeedingStatus.collectAsStateWithLifecycle()
 
     val isBento = LocalDesignStyle.current == AppDesignStyle.NORDIC_BENTO
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    val todayDateKey = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+    val olivaFedToday = olivaStatus != null && olivaStatus?.fed == true && olivaStatus?.dateKey == todayDateKey
 
     val pendingTasks = tasks.filter { !it.completed }
     val pendingShopping = shoppingItems.filter { !it.checked }
@@ -215,6 +229,17 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+
+        // Quick 1-Tap Oliva Feeding Toggle
+        item {
+            OlivaFeedingQuickCard(
+                fedToday = olivaFedToday,
+                fedByMemberName = olivaStatus?.fedByMemberName.orEmpty(),
+                fedTimeLabel = olivaStatus?.fedTimeLabel.orEmpty(),
+                isDark = isDark,
+                onToggle = { viewModel.toggleOlivaFedToday(olivaFedToday) }
+            )
         }
 
         // Next Upcoming Event
@@ -711,6 +736,140 @@ private fun SectionHeaderRow(
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(15.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun OlivaFeedingQuickCard(
+    fedToday: Boolean,
+    fedByMemberName: String,
+    fedTimeLabel: String,
+    isDark: Boolean,
+    onToggle: () -> Unit
+) {
+    val containerColor by animateColorAsState(
+        targetValue = when {
+            fedToday && isDark -> Color(0xFF153427)
+            fedToday -> Color(0xFFE6F4EC)
+            isDark -> Color(0xFF2B2219)
+            else -> Color(0xFFFFF6EB)
+        },
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "oliva_bg"
+    )
+    val borderColor by animateColorAsState(
+        targetValue = when {
+            fedToday && isDark -> Color(0xFF2E7D5B)
+            fedToday -> Color(0xFF81C9A3)
+            isDark -> Color(0xFF7A5229)
+            else -> Color(0xFFE9C396)
+        },
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "oliva_border"
+    )
+    val accentColor = when {
+        fedToday && isDark -> Color(0xFF7DE2AD)
+        fedToday -> Color(0xFF157A4B)
+        isDark -> Color(0xFFFFB774)
+        else -> Color(0xFFB55614)
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(onClick = onToggle)
+            .testTag("oliva_feeding_card"),
+        shape = MaterialTheme.shapes.medium,
+        color = containerColor,
+        border = BorderStroke(1.5.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = accentColor.copy(alpha = if (isDark) 0.22f else 0.14f),
+                modifier = Modifier.size(46.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (fedToday) Icons.Rounded.CheckCircle else Icons.Rounded.Pets,
+                        contentDescription = if (fedToday) "Oliva ya ha comido hoy" else "Oliva pendiente de comer hoy",
+                        tint = accentColor,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (fedToday) "Oliva ya ha comido hoy" else "¿Ha comido hoy Oliva?",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (fedToday) {
+                        val who = fedByMemberName.ifBlank { "Familia" }
+                        val whenStr = if (fedTimeLabel.isNotBlank()) " a las $fedTimeLabel" else ""
+                        "Por $who$whenStr · Sincronizado"
+                    } else {
+                        "Pendiente hoy · Toca para marcar"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (fedToday) {
+                OutlinedButton(
+                    onClick = onToggle,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.6f)),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("oliva_feeding_button")
+                ) {
+                    Text(
+                        text = "Deshacer",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = accentColor
+                    )
+                }
+            } else {
+                Button(
+                    onClick = onToggle,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = accentColor,
+                        contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("oliva_feeding_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Restaurant,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Ya comió",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+            }
         }
     }
 }

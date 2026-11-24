@@ -212,3 +212,19 @@ data class ProductHistoryEntry(
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
+
+@Keep
+@IgnoreExtraProperties
+data class PetFeedingStatus(
+    @DocumentId val id: String = "",
+    val familyId: String = "",
+    val petName: String = "Oliva",
+    val dateKey: String = "",
+    val fed: Boolean = false,
+    val fedByMemberName: String = "",
+    val fedTimeLabel: String = "",
+    val createdByUid: String = "",
+    val memberUids: List<String> = emptyList(),
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)

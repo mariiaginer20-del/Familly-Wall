@@ -242,6 +242,24 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["familyId", "name", "nameLower", "lastUnit", "lastCategory", "lastSupermarket", "useCount", "createdByUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "PetFeedingStatus": {
+      "title": "PetFeedingStatus",
+      "description": "Shared daily pet feeding tracker status (e.g., whether Oliva has been fed today).",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "petName": { "type": "string" },
+        "dateKey": { "type": "string" },
+        "fed": { "type": "boolean" },
+        "fedByMemberName": { "type": "string" },
+        "fedTimeLabel": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "petName", "dateKey", "fed", "fedByMemberName", "fedTimeLabel", "createdByUid", "memberUids", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -296,6 +314,10 @@
     "/families/{familyId}/productHistory/{entryId}": {
       "schema": { "$ref": "#/entities/ProductHistoryEntry" },
       "description": "Autocomplete shopping product history."
+    },
+    "/families/{familyId}/petCare/{entryId}": {
+      "schema": { "$ref": "#/entities/PetFeedingStatus" },
+      "description": "Daily pet feeding check status synced across family members."
     }
   }
 }
