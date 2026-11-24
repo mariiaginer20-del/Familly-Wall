@@ -38,6 +38,12 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
+      - name: Cachear debug.keystore estable
+        uses: actions/cache@v4
+        with:
+          path: debug.keystore
+          key: android-debug-keystore-v1
+
       - name: Preparar keystore, google-services.json y variables
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
@@ -60,7 +66,8 @@ jobs:
                 -dname "CN=Android Debug,O=Android,C=US"
             fi
           fi
-          ls -lh debug.keystore
+          echo "=== Huella SHA-1 de firma de esta APK (para Firebase Console si hiciera falta) ==="
+          keytool -list -v -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android | grep -E "SHA1:|SHA256:" || true
 
           if [ ! -f app/google-services.json ] && [ -n "$GOOGLE_SERVICES_JSON" ]; then
             TRIMMED=$(echo "$GOOGLE_SERVICES_JSON" | tr -d '[:space:]')
@@ -73,8 +80,7 @@ jobs:
 
           if [ ! -f app/google-services.json ]; then
             echo "::error::Falta app/google-services.json en el repositorio de GitHub."
-            echo "AI Studio no sube google-services.json automáticamente al hacer Push a GitHub."
-            echo "Solución: crea el secreto GOOGLE_SERVICES_JSON en GitHub (Settings -> Secrets and variables -> Actions) con el contenido de app/google-services.json, o súbelo manualmente a la carpeta app/ del repositorio."
+            echo "Descárgalo desde Firebase Console (proyecto gen-lang-client-0564885100) y añádelo al secreto GOOGLE_SERVICES_JSON o súbelo a la carpeta app/ en GitHub."
             exit 1
           fi
 
