@@ -1,5 +1,6 @@
 package com.example.notification
 
+import android.app.AlarmManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -12,6 +13,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.data.model.CalendarEvent
+import com.example.data.model.EventReminderOptions
+import com.example.data.model.resolvedReminders
+import java.util.Calendar
 
 class FamilyNotificationManager(private val context: Context) {
 
@@ -63,13 +67,15 @@ class FamilyNotificationManager(private val context: Context) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        val timeText = if (event.allDay) "Todo el día" else "${event.startTime} - ${event.endTime}"
+
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("Evento próximo: ${event.title}")
-            .setContentText("${event.startTime} - ${event.endTime} · ${event.assignedMemberName}")
+            .setContentText("$timeText · ${event.assignedMemberName}")
             .setStyle(
                 NotificationCompat.BigTextStyle().bigText(
-                    "${event.title}\n${event.startTime} - ${event.endTime}\n${event.assignedMemberName}\n${if (event.location.isNotBlank()) event.location else "Sin ubicación específica"}\n${event.description}"
+                    "${event.title}\n$timeText\n${event.assignedMemberName}\n${if (event.location.isNotBlank()) event.location else "Sin ubicación específica"}\n${event.description}"
                 )
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -110,6 +116,75 @@ class FamilyNotificationManager(private val context: Context) {
             NotificationManagerCompat.from(context).notify(notificationId, notification)
         } catch (_: SecurityException) {
             // Handled safely
+        }
+    }
+
+    fun scheduleEventReminders(event: CalendarEvent) {
+        if (event.id.isBlank()) return
+        cancelEventReminders(event.id)
+
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val startCal = Calendar.getInstance().apply {
+            timeInMillis = event.dateEpochMillis
+            if (event.allDay) {
+                set(Calendar.HOUR_OF_DAY, 9)
+                set(Calendar.MINUTE, 0)
+            } else {
+                val parts = event.startTime.split(":")
+                val hour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 9
+                val min = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
+                set(Calendar.HOUR_OF_DAY, hour)
+                set(Calendar.MINUTE, min)
+            }
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        val eventStartMillis = startCal.timeInMillis
+        val now = System.currentTimeMillis()
+        val timeLabel = if (event.allDay) "Todo el día" else "${event.startTime} - ${event.endTime}"
+
+        event.resolvedReminders().forEach { mins ->
+            val triggerAt = eventStartMillis - mins * 60_000L
+            if (triggerAt > now) {
+                val reqCode = ("${event.id}_$mins".hashCode()) and 0x7FFFFFFF
+                val remindText = EventReminderOptions.formatShort(mins)
+                val intent = Intent(context, EventReminderReceiver::class.java).apply {
+                    putExtra(EventReminderReceiver.EXTRA_TITLE, "Recordatorio ($remindText): ${event.title}")
+                    putExtra(EventReminderReceiver.EXTRA_MESSAGE, "$timeLabel · ${event.assignedMemberName}")
+                    putExtra(EventReminderReceiver.EXTRA_NOTIF_ID, reqCode)
+                }
+                val pi = PendingIntent.getBroadcast(
+                    context,
+                    reqCode,
+                    intent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                try {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+                } catch (_: SecurityException) {
+                    // Handled safely without privileged exact-alarm permissions
+                }
+            }
+        }
+    }
+
+    fun cancelEventReminders(eventId: String) {
+        if (eventId.isBlank()) return
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        EventReminderOptions.options.forEach { (mins, _) ->
+            val reqCode = ("${eventId}_$mins".hashCode()) and 0x7FFFFFFF
+            val intent = Intent(context, EventReminderReceiver::class.java)
+            val pi = PendingIntent.getBroadcast(
+                context,
+                reqCode,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE
+            )
+            if (pi != null) {
+                alarmManager.cancel(pi)
+                pi.cancel()
+            }
         }
     }
 }

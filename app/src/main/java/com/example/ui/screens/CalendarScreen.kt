@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Event
@@ -54,7 +55,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.CalendarEvent
+import com.example.data.model.CategoryScope
 import com.example.data.model.EventCategory
+import com.example.data.model.EventDateUtils
+import com.example.data.model.EventReminderOptions
+import com.example.data.model.FamilyCategory
+import com.example.data.model.coversDayKey
+import com.example.data.model.formatSpanSummary
+import com.example.data.model.resolvedReminders
 import com.example.data.preferences.AppDesignStyle
 import com.example.ui.FamilyWallViewModel
 import com.example.ui.theme.LocalDesignStyle
@@ -63,23 +71,16 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-private fun dayKey(epochMillis: Long): Long {
-    val cal = Calendar.getInstance().apply {
-        timeInMillis = epochMillis
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }
-    return cal.get(Calendar.YEAR) * 10000L + (cal.get(Calendar.MONTH) + 1) * 100L + cal.get(Calendar.DAY_OF_MONTH)
-}
-
 @Composable
 fun CalendarScreen(
     viewModel: FamilyWallViewModel,
     modifier: Modifier = Modifier
 ) {
     val events by viewModel.filteredEvents.collectAsStateWithLifecycle()
+    val allCategories by viewModel.allCategories.collectAsStateWithLifecycle()
+    val eventCategories = remember(allCategories) {
+        allCategories.filter { it.scope == CategoryScope.EVENT.name }
+    }
     val selectedMember by viewModel.selectedMemberFilter.collectAsStateWithLifecycle()
     val selectedDateMillis by viewModel.selectedCalendarDateMillis.collectAsStateWithLifecycle()
 
@@ -90,12 +91,8 @@ fun CalendarScreen(
     var displayedMonth by remember { mutableIntStateOf(initialCal.get(Calendar.MONTH)) }
     var showAllEvents by remember { mutableStateOf(false) }
 
-    val todayKey = remember { dayKey(System.currentTimeMillis()) }
-    val selectedDayKey = remember(selectedDateMillis) { dayKey(selectedDateMillis) }
-
-    val eventsByDay = remember(events) {
-        events.groupBy { dayKey(it.dateEpochMillis) }
-    }
+    val todayKey = remember { EventDateUtils.dayKey(System.currentTimeMillis()) }
+    val selectedDayKey = remember(selectedDateMillis) { EventDateUtils.dayKey(selectedDateMillis) }
 
     val monthTitle = remember(displayedYear, displayedMonth) {
         val cal = Calendar.getInstance().apply {
@@ -134,9 +131,20 @@ fun CalendarScreen(
         cells.chunked(7)
     }
 
+    val eventsByDay = remember(events, calendarCells) {
+        val map = mutableMapOf<Long, List<CalendarEvent>>()
+        calendarCells.flatten().forEach { (_, millis) ->
+            if (millis != null) {
+                val k = EventDateUtils.dayKey(millis)
+                map[k] = events.filter { it.coversDayKey(k) }
+            }
+        }
+        map
+    }
+
     val visibleEvents = remember(events, selectedDayKey, showAllEvents) {
         if (showAllEvents) events
-        else events.filter { dayKey(it.dateEpochMillis) == selectedDayKey }
+        else events.filter { it.coversDayKey(selectedDayKey) }
     }
 
     val selectedDateLabel = remember(selectedDateMillis) {
@@ -181,20 +189,32 @@ fun CalendarScreen(
                         )
                     }
 
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = if (!showAllEvents) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(18.dp))
-                            .clickable { showAllEvents = !showAllEvents }
-                            .testTag("calendar_toggle_all_button")
-                    ) {
-                        Text(
-                            text = if (showAllEvents) "Ver solo día" else "Ver todos (${events.size})",
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = if (!showAllEvents) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { viewModel.openManageCategories(CategoryScope.EVENT) },
+                            modifier = Modifier.testTag("calendar_manage_categories_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Category,
+                                contentDescription = "Gestionar categorías de agenda",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(18.dp),
+                            color = if (!showAllEvents) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(18.dp))
+                                .clickable { showAllEvents = !showAllEvents }
+                                .testTag("calendar_toggle_all_button")
+                        ) {
+                            Text(
+                                text = if (showAllEvents) "Ver solo día" else "Ver todos (${events.size})",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = if (!showAllEvents) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -310,7 +330,7 @@ fun CalendarScreen(
                                                     .height(44.dp)
                                             )
                                         } else {
-                                            val k = dayKey(cellMillis)
+                                            val k = EventDateUtils.dayKey(cellMillis)
                                             val isSelected = k == selectedDayKey
                                             val isToday = k == todayKey
                                             val dayEvents = eventsByDay[k].orEmpty()
@@ -435,6 +455,7 @@ fun CalendarScreen(
                 items(visibleEvents, key = { it.id }) { event ->
                     CalendarEventCard(
                         event = event,
+                        eventCategories = eventCategories,
                         dateLabel = viewModel.formatEventDate(event.dateEpochMillis),
                         onEdit = { viewModel.startEditingEvent(event) },
                         onTriggerNotification = { viewModel.triggerEventNotification(event) },
@@ -461,6 +482,7 @@ fun CalendarScreen(
 @Composable
 fun CalendarEventCard(
     event: CalendarEvent,
+    eventCategories: List<FamilyCategory>,
     dateLabel: String,
     onEdit: () -> Unit,
     onTriggerNotification: () -> Unit,
@@ -469,7 +491,10 @@ fun CalendarEventCard(
     val memberColor = runCatching {
         Color(android.graphics.Color.parseColor(event.memberColorHex))
     }.getOrDefault(MaterialTheme.colorScheme.primary)
-    val cat = EventCategory.fromString(event.category)
+    val categoryEmoji = eventCategories.firstOrNull {
+        it.name.equals(event.category, ignoreCase = true)
+    }?.emoji ?: EventCategory.fromString(event.category).emoji
+    val spanSummary = event.formatSpanSummary(dateLabel)
 
     Surface(
         modifier = Modifier
@@ -488,19 +513,27 @@ fun CalendarEventCard(
                 .padding(16.dp)
         ) {
             Column(
-                modifier = Modifier.width(56.dp),
+                modifier = Modifier.width(60.dp),
                 horizontalAlignment = Alignment.Start
             ) {
-                Text(
-                    text = event.startTime,
-                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = event.endTime,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                if (event.allDay) {
+                    Text(
+                        text = "Todo\nel día",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                } else {
+                    Text(
+                        text = event.startTime,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = event.endTime,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             Box(
@@ -520,7 +553,7 @@ fun CalendarEventCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${cat.emoji} ${dateLabel.uppercase()} · ${event.assignedMemberName.uppercase()}",
+                        text = "$categoryEmoji ${spanSummary.uppercase()} · ${event.assignedMemberName.uppercase()}",
                         style = MaterialTheme.typography.labelSmall.copy(
                             letterSpacing = 0.7.sp,
                             fontWeight = FontWeight.Bold
@@ -597,10 +630,13 @@ fun CalendarEventCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val remindersText = event.resolvedReminders()
+                        .joinToString(", ") { EventReminderOptions.formatShort(it) }
                     Text(
-                        text = "Aviso ${event.reminderMinutesBefore} min antes",
+                        text = "Avisos: $remindersText",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
                     )
 
                     OutlinedButton(

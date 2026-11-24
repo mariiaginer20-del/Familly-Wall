@@ -94,6 +94,7 @@ service cloud.firestore {
              data.category is string && data.category.size() >= 1 && data.category.size() <= 60 &&
              data.checked is bool &&
              data.addedByMemberName is string && data.addedByMemberName.size() >= 1 && data.addedByMemberName.size() <= 40 &&
+             (!('assignedMemberName' in data) || (data.assignedMemberName is string && data.assignedMemberName.size() >= 1 && data.assignedMemberName.size() <= 40)) &&
              data.notes is string && data.notes.size() <= 300 &&
              data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
              isValidUidList(data.memberUids);
@@ -126,12 +127,16 @@ service cloud.firestore {
              data.description is string && data.description.size() <= 400 &&
              data.location is string && data.location.size() <= 150 &&
              data.dateEpochMillis is int && data.dateEpochMillis > 0 &&
+             (!('endDateEpochMillis' in data) || (data.endDateEpochMillis is int && data.endDateEpochMillis >= 0)) &&
+             (!('extraDatesEpochMillis' in data) || (data.extraDatesEpochMillis is list && data.extraDatesEpochMillis.size() <= 31)) &&
+             (!('allDay' in data) || data.allDay is bool) &&
              data.startTime is string && data.startTime.size() >= 3 && data.startTime.size() <= 10 &&
              data.endTime is string && data.endTime.size() >= 3 && data.endTime.size() <= 10 &&
              data.assignedMemberName is string && data.assignedMemberName.size() >= 1 && data.assignedMemberName.size() <= 40 &&
              data.memberColorHex is string && data.memberColorHex.size() >= 4 && data.memberColorHex.size() <= 16 &&
-             data.category is string && data.category.size() >= 1 && data.category.size() <= 30 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 40 &&
              data.reminderMinutesBefore is int && data.reminderMinutesBefore >= 0 && data.reminderMinutesBefore <= 10080 &&
+             (!('reminderMinutesList' in data) || (data.reminderMinutesList is list && data.reminderMinutesList.size() <= 10)) &&
              data.notified is bool &&
              data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
              isValidUidList(data.memberUids);
@@ -153,7 +158,7 @@ service cloud.firestore {
 
     function isValidMealPlan(data) {
       return isValidId(data.familyId) &&
-             data.dayOfWeekIndex is int && data.dayOfWeekIndex >= 0 && data.dayOfWeekIndex <= 6 &&
+             data.dayOfWeekIndex is int && data.dayOfWeekIndex >= 0 && data.dayOfWeekIndex <= 13 &&
              data.mealType in ['DESAYUNO', 'COMIDA', 'MERIENDA', 'CENA'] &&
              data.dishName is string && data.dishName.size() >= 1 && data.dishName.size() <= 120 &&
              (!('recipeId' in data) || isValidId(data.recipeId)) &&
@@ -172,6 +177,28 @@ service cloud.firestore {
              data.instructions is string && data.instructions.size() <= 5000 &&
              data.emoji is string && data.emoji.size() >= 1 && data.emoji.size() <= 16 &&
              data.favorite is bool &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isValidUidList(data.memberUids);
+    }
+
+    function isValidFamilyCategory(data) {
+      return isValidId(data.familyId) &&
+             data.scope in ['EVENT', 'TASK', 'SHOPPING', 'RECIPE'] &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 40 &&
+             data.emoji is string && data.emoji.size() >= 1 && data.emoji.size() <= 16 &&
+             data.colorHex is string && data.colorHex.size() >= 4 && data.colorHex.size() <= 16 &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isValidUidList(data.memberUids);
+    }
+
+    function isValidProductHistory(data) {
+      return isValidId(data.familyId) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+             data.nameLower is string && data.nameLower.size() >= 1 && data.nameLower.size() <= 120 &&
+             data.lastUnit is string && data.lastUnit.size() >= 1 && data.lastUnit.size() <= 20 &&
+             data.lastCategory is string && data.lastCategory.size() >= 1 && data.lastCategory.size() <= 60 &&
+             data.lastSupermarket is string && data.lastSupermarket.size() >= 1 && data.lastSupermarket.size() <= 40 &&
+             data.useCount is int && data.useCount >= 1 && data.useCount <= 100000 &&
              data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
              isValidUidList(data.memberUids);
     }
@@ -304,7 +331,7 @@ service cloud.firestore {
         allow create: if isSignedIn() &&
                          isValidId(itemId) &&
                          incoming().keys().hasAll(['familyId', 'name', 'quantity', 'unit', 'supermarket', 'priority', 'hasOffer', 'offerDetails', 'category', 'checked', 'addedByMemberName', 'notes', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
-                         incoming().keys().hasOnly(['familyId', 'name', 'quantity', 'unit', 'supermarket', 'priority', 'hasOffer', 'offerDetails', 'category', 'checked', 'addedByMemberName', 'notes', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'name', 'quantity', 'unit', 'supermarket', 'priority', 'hasOffer', 'offerDetails', 'category', 'checked', 'addedByMemberName', 'assignedMemberName', 'notes', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
                          incoming().familyId == familyId &&
                          incoming().createdByUid == request.auth.uid &&
                          request.auth.uid in incoming().memberUids &&
@@ -324,7 +351,7 @@ service cloud.firestore {
                            (incoming().diff(existing()).affectedKeys().hasOnly(['checked', 'updatedAt'])) ||
                            (incoming().diff(existing()).affectedKeys().hasOnly(['quantity', 'updatedAt'])) ||
                            (incoming().memberUids == existing().memberUids &&
-                            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'quantity', 'unit', 'supermarket', 'priority', 'hasOffer', 'offerDetails', 'category', 'checked', 'addedByMemberName', 'notes', 'updatedAt'])) ||
+                            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'quantity', 'unit', 'supermarket', 'priority', 'hasOffer', 'offerDetails', 'category', 'checked', 'addedByMemberName', 'assignedMemberName', 'notes', 'updatedAt'])) ||
                            (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
                             incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
                          );
@@ -407,7 +434,7 @@ service cloud.firestore {
         allow create: if isSignedIn() &&
                          isValidId(eventId) &&
                          incoming().keys().hasAll(['familyId', 'title', 'description', 'location', 'dateEpochMillis', 'startTime', 'endTime', 'assignedMemberName', 'memberColorHex', 'category', 'reminderMinutesBefore', 'notified', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
-                         incoming().keys().hasOnly(['familyId', 'title', 'description', 'location', 'dateEpochMillis', 'startTime', 'endTime', 'assignedMemberName', 'memberColorHex', 'category', 'reminderMinutesBefore', 'notified', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'title', 'description', 'location', 'dateEpochMillis', 'endDateEpochMillis', 'extraDatesEpochMillis', 'allDay', 'startTime', 'endTime', 'assignedMemberName', 'memberColorHex', 'category', 'reminderMinutesBefore', 'reminderMinutesList', 'notified', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
                          incoming().familyId == familyId &&
                          incoming().createdByUid == request.auth.uid &&
                          request.auth.uid in incoming().memberUids &&
@@ -426,7 +453,7 @@ service cloud.firestore {
                          isFamilyMemberDoc(familyId) && (
                            (incoming().diff(existing()).affectedKeys().hasOnly(['notified', 'updatedAt'])) ||
                            (incoming().memberUids == existing().memberUids &&
-                            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'location', 'dateEpochMillis', 'startTime', 'endTime', 'assignedMemberName', 'memberColorHex', 'category', 'reminderMinutesBefore', 'notified', 'updatedAt'])) ||
+                            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'location', 'dateEpochMillis', 'endDateEpochMillis', 'extraDatesEpochMillis', 'allDay', 'startTime', 'endTime', 'assignedMemberName', 'memberColorHex', 'category', 'reminderMinutesBefore', 'reminderMinutesList', 'notified', 'updatedAt'])) ||
                            (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
                             incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
                          );
@@ -533,6 +560,73 @@ service cloud.firestore {
                          );
 
         allow delete: if isSignedIn() && isValidId(recipeId) && isFamilyMemberDoc(familyId);
+      }
+
+      match /categories/{categoryId} {
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+        allow get: if isSignedIn() && isValidId(categoryId) && (request.auth.uid in existing().memberUids || isFamilyMemberDoc(familyId));
+
+        allow create: if isSignedIn() &&
+                         isValidId(categoryId) &&
+                         incoming().keys().hasAll(['familyId', 'scope', 'name', 'emoji', 'colorHex', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'scope', 'name', 'emoji', 'colorHex', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().familyId == familyId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidFamilyCategory(incoming()) &&
+                         isFamilyMemberAfter(familyId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(categoryId) &&
+                         isValidFamilyCategory(incoming()) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().scope == existing().scope &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isFamilyMemberDoc(familyId) && (
+                           (incoming().memberUids == existing().memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'emoji', 'colorHex', 'updatedAt'])) ||
+                           (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(categoryId) && isFamilyMemberDoc(familyId);
+      }
+
+      match /productHistory/{entryId} {
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+        allow get: if isSignedIn() && isValidId(entryId) && (request.auth.uid in existing().memberUids || isFamilyMemberDoc(familyId));
+
+        allow create: if isSignedIn() &&
+                         isValidId(entryId) &&
+                         incoming().keys().hasAll(['familyId', 'name', 'nameLower', 'lastUnit', 'lastCategory', 'lastSupermarket', 'useCount', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'name', 'nameLower', 'lastUnit', 'lastCategory', 'lastSupermarket', 'useCount', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().familyId == familyId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidProductHistory(incoming()) &&
+                         isFamilyMemberAfter(familyId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(entryId) &&
+                         isValidProductHistory(incoming()) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isFamilyMemberDoc(familyId) && (
+                           (incoming().memberUids == existing().memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'nameLower', 'lastUnit', 'lastCategory', 'lastSupermarket', 'useCount', 'updatedAt'])) ||
+                           (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(entryId) && isFamilyMemberDoc(familyId);
       }
     }
   }

@@ -66,6 +66,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.data.model.CategoryScope
 import com.example.data.preferences.AppDesignStyle
 import com.example.data.preferences.AppearanceSettings
 import com.example.data.preferences.ThemeDarkMode
@@ -83,6 +84,7 @@ import com.example.ui.dialogs.AddRecipeDialog
 import com.example.ui.dialogs.AddShoppingItemDialog
 import com.example.ui.dialogs.AddTaskDialog
 import com.example.ui.dialogs.FamilySettingsDialog
+import com.example.ui.dialogs.ManageCategoriesDialog
 import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.CalendarScreen
 import com.example.ui.screens.FamilySetupScreen
@@ -291,6 +293,9 @@ fun MainApp(
     val events by viewModel.allEvents.collectAsStateWithLifecycle()
     val tasks by viewModel.allTasks.collectAsStateWithLifecycle()
     val shoppingItems by viewModel.rawShoppingItems.collectAsStateWithLifecycle()
+    val allCategories by viewModel.allCategories.collectAsStateWithLifecycle()
+    val productHistory by viewModel.productHistory.collectAsStateWithLifecycle()
+    val manageCategoriesScope by viewModel.manageCategoriesScope.collectAsStateWithLifecycle()
 
     val showAddShopping by viewModel.showAddShoppingDialog.collectAsStateWithLifecycle()
     val editingShoppingItem by viewModel.editingShoppingItem.collectAsStateWithLifecycle()
@@ -595,6 +600,10 @@ fun MainApp(
                     snackbarHostState.showSnackbar("Código copiado al portapapeles")
                 }
             },
+            onOpenManageCategories = {
+                showSettingsDialog = false
+                viewModel.openManageCategories(CategoryScope.SHOPPING)
+            },
             onDismiss = { showSettingsDialog = false }
         )
     }
@@ -602,7 +611,11 @@ fun MainApp(
     if (showAddShopping) {
         AddShoppingItemDialog(
             members = members,
+            categories = allCategories.filter { it.scope == CategoryScope.SHOPPING.name },
+            productHistory = productHistory,
+            existingShoppingItems = shoppingItems,
             initialItem = editingShoppingItem,
+            onManageCategories = { viewModel.openManageCategories(CategoryScope.SHOPPING) },
             onDismiss = { viewModel.setShowAddShoppingDialog(false) },
             onSave = { draft ->
                 viewModel.saveShoppingItem(draft, editingShoppingItem)
@@ -614,8 +627,10 @@ fun MainApp(
     if (showAddEvent) {
         AddCalendarEventDialog(
             members = members,
+            categories = allCategories.filter { it.scope == CategoryScope.EVENT.name },
             initialDateMillis = selectedDateMillis,
             initialEvent = editingEvent,
+            onManageCategories = { viewModel.openManageCategories(CategoryScope.EVENT) },
             onDismiss = { viewModel.setShowAddEventDialog(false) },
             onSave = { draft ->
                 viewModel.saveCalendarEvent(draft, editingEvent)
@@ -627,7 +642,9 @@ fun MainApp(
     if (showAddTask) {
         AddTaskDialog(
             members = members,
+            categories = allCategories.filter { it.scope == CategoryScope.TASK.name },
             initialTask = editingTask,
+            onManageCategories = { viewModel.openManageCategories(CategoryScope.TASK) },
             onDismiss = { viewModel.setShowAddTaskDialog(false) },
             onSave = { draft ->
                 viewModel.saveTask(draft, editingTask)
@@ -638,11 +655,33 @@ fun MainApp(
 
     if (showAddRecipe) {
         AddRecipeDialog(
+            categories = allCategories.filter { it.scope == CategoryScope.RECIPE.name },
+            onManageCategories = { viewModel.openManageCategories(CategoryScope.RECIPE) },
             onDismiss = { viewModel.setShowAddRecipeDialog(false) },
             onSave = { draft ->
                 viewModel.addRecipe(draft)
                 viewModel.setShowAddRecipeDialog(false)
             }
+        )
+    }
+
+    if (manageCategoriesScope != null) {
+        ManageCategoriesDialog(
+            initialScope = manageCategoriesScope!!,
+            allCategories = allCategories,
+            onAddCategory = { scopeCat, name, emoji, colorHex ->
+                viewModel.addCategory(scopeCat, name, emoji, colorHex)
+            },
+            onUpdateCategory = { category, oldName ->
+                viewModel.updateCategory(category, oldName)
+            },
+            onDeleteCategory = { category ->
+                viewModel.deleteCategory(category)
+            },
+            onRestoreDefaults = {
+                viewModel.restoreDefaultCategories()
+            },
+            onDismiss = { viewModel.closeManageCategories() }
         )
     }
 }

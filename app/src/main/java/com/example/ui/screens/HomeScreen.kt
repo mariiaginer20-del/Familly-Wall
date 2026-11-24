@@ -48,6 +48,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.model.MealType
+import com.example.data.model.formatSpanSummary
 import com.example.data.preferences.AppDesignStyle
 import com.example.ui.FamilyWallViewModel
 import com.example.ui.MainTab
@@ -257,8 +259,10 @@ fun HomeScreen(
                             Spacer(modifier = Modifier.width(14.dp))
 
                             Column(modifier = Modifier.weight(1f)) {
+                                val timeSummary = if (nextEvent.allDay) "Todo el día" else "${nextEvent.startTime}–${nextEvent.endTime}"
+                                val dateSpan = nextEvent.formatSpanSummary(viewModel.formatEventDate(nextEvent.dateEpochMillis))
                                 Text(
-                                    text = "${viewModel.formatEventDate(nextEvent.dateEpochMillis)} · ${nextEvent.startTime}–${nextEvent.endTime}",
+                                    text = "$dateSpan · $timeSummary",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.secondary
                                 )
@@ -328,14 +332,9 @@ fun HomeScreen(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                        val mealTypes = listOf(
-                            "DESAYUNO" to "Desayuno",
-                            "COMIDA" to "Comida",
-                            "MERIENDA" to "Merienda",
-                            "CENA" to "Cena"
-                        )
-                        mealTypes.forEachIndexed { idx, (type, label) ->
-                            val dish = todayMeals.firstOrNull { it.mealType == type }?.dishName?.takeIf { it.isNotBlank() } ?: "Sin definir"
+                        val mealTypes = MealType.plannerTypes
+                        mealTypes.forEachIndexed { idx, mType ->
+                            val dish = todayMeals.firstOrNull { it.mealType == mType.name }?.dishName?.takeIf { it.isNotBlank() } ?: "Sin definir"
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -344,7 +343,7 @@ fun HomeScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = label,
+                                    text = mType.displayName,
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.width(88.dp)

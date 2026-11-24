@@ -62,6 +62,7 @@ data class ShoppingItem(
     val category: String = "Despensa",
     val checked: Boolean = false,
     val addedByMemberName: String = "Familia",
+    val assignedMemberName: String = "Todos",
     val notes: String = "",
     val createdByUid: String = "",
     val memberUids: List<String> = emptyList(),
@@ -109,12 +110,16 @@ data class CalendarEvent(
     val description: String = "",
     val location: String = "",
     val dateEpochMillis: Long = 0L,
+    val endDateEpochMillis: Long = 0L,
+    val extraDatesEpochMillis: List<Long> = emptyList(),
+    val allDay: Boolean = false,
     val startTime: String = "09:00",
     val endTime: String = "10:00",
     val assignedMemberName: String = "Todos",
     val memberColorHex: String = "#1B4D3E",
-    val category: String = "GENERAL",
+    val category: String = "General",
     val reminderMinutesBefore: Int = 15,
+    val reminderMinutesList: List<Int> = emptyList(),
     val notified: Boolean = false,
     val createdByUid: String = "",
     val memberUids: List<String> = emptyList(),
@@ -163,13 +168,45 @@ data class Recipe(
     @DocumentId val id: String = "",
     val familyId: String = "",
     val title: String = "",
-    val category: String = "General",
+    val category: String = "Plato principal",
     val prepTimeMinutes: Int = 30,
     val servings: Int = 4,
     val ingredients: String = "",
     val instructions: String = "",
     val emoji: String = "🍳",
     val favorite: Boolean = false,
+    val createdByUid: String = "",
+    val memberUids: List<String> = emptyList(),
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@Keep
+@IgnoreExtraProperties
+data class FamilyCategory(
+    @DocumentId val id: String = "",
+    val familyId: String = "",
+    val scope: String = "EVENT",
+    val name: String = "",
+    val emoji: String = "📌",
+    val colorHex: String = "#1B4D3E",
+    val createdByUid: String = "",
+    val memberUids: List<String> = emptyList(),
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@Keep
+@IgnoreExtraProperties
+data class ProductHistoryEntry(
+    @DocumentId val id: String = "",
+    val familyId: String = "",
+    val name: String = "",
+    val nameLower: String = "",
+    val lastUnit: String = "ud",
+    val lastCategory: String = "Despensa",
+    val lastSupermarket: String = "Mercadona",
+    val useCount: Int = 1,
     val createdByUid: String = "",
     val memberUids: List<String> = emptyList(),
     @ServerTimestamp val createdAt: Timestamp? = null,

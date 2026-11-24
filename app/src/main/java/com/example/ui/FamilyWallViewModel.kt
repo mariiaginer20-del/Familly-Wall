@@ -4,15 +4,17 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.CalendarEvent
+import com.example.data.model.CategoryScope
 import com.example.data.model.CustomList
 import com.example.data.model.CustomListItem
-import com.example.data.model.EventCategory
+import com.example.data.model.FamilyCategory
 import com.example.data.model.FamilyMember
 import com.example.data.model.FamilyTask
 import com.example.data.model.FamilyUnit
 import com.example.data.model.ItemPriority
 import com.example.data.model.MealPlan
 import com.example.data.model.MealType
+import com.example.data.model.ProductHistoryEntry
 import com.example.data.model.Recipe
 import com.example.data.model.ShoppingItem
 import com.example.data.model.Supermarket
@@ -71,6 +73,7 @@ data class ShoppingItemDraft(
     val offerDetails: String = "",
     val category: String = "Despensa",
     val addedByMemberName: String = "Familia",
+    val assignedMemberName: String = "Todos",
     val notes: String = ""
 )
 
@@ -79,12 +82,16 @@ data class CalendarEventDraft(
     val description: String = "",
     val location: String = "",
     val dateEpochMillis: Long = System.currentTimeMillis(),
+    val endDateEpochMillis: Long = 0L,
+    val extraDatesEpochMillis: List<Long> = emptyList(),
+    val allDay: Boolean = false,
     val startTime: String = "10:00",
     val endTime: String = "11:00",
     val assignedMemberName: String = "Todos",
     val memberColorHex: String = "#1B4D3E",
-    val category: EventCategory = EventCategory.GENERAL,
-    val reminderMinutesBefore: Int = 15
+    val category: String = "General",
+    val reminderMinutesBefore: Int = 15,
+    val reminderMinutesList: List<Int> = listOf(15)
 )
 
 data class TaskDraft(
@@ -99,7 +106,7 @@ data class TaskDraft(
 
 data class RecipeDraft(
     val title: String = "",
-    val category: String = "General",
+    val category: String = "Plato principal",
     val prepTimeMinutes: Int = 30,
     val servings: Int = 4,
     val ingredients: String = "",
@@ -205,6 +212,7 @@ class FamilyWallViewModel(
         .toUiState("unidad familiar")
 
     private var lastSyncedSignature: String? = null
+    private var lastCategorySeededFamilyId: String? = null
 
     init {
         viewModelScope.launch {
@@ -214,6 +222,14 @@ class FamilyWallViewModel(
                 if (sig != lastSyncedSignature && family.memberUids.isNotEmpty()) {
                     lastSyncedSignature = sig
                     repository.syncMemberUidsAcrossFamily(family)
+                }
+                if (family.id != lastCategorySeededFamilyId && family.memberUids.isNotEmpty()) {
+                    lastCategorySeededFamilyId = family.id
+                    repository.seedDefaultCategoriesIfNeeded(
+                        familyId = family.id,
+                        memberUids = family.memberUids,
+                        onlyIfCompletelyEmpty = true
+                    )
                 }
             }
         }
@@ -348,9 +364,21 @@ class FamilyWallViewModel(
     val selectedCalendarDateMillis: StateFlow<Long> = _selectedCalendarDateMillis.asStateFlow()
     fun selectCalendarDate(millis: Long) { _selectedCalendarDateMillis.value = millis }
 
+    // Category Manager Dialog state
+    private val _manageCategoriesScope = MutableStateFlow<CategoryScope?>(null)
+    val manageCategoriesScope: StateFlow<CategoryScope?> = _manageCategoriesScope.asStateFlow()
+    fun openManageCategories(scope: CategoryScope) { _manageCategoriesScope.value = scope }
+    fun closeManageCategories() { _manageCategoriesScope.value = null }
+
     // Family Data Streams
     val allMembers: StateFlow<List<FamilyMember>> =
         observeFamilySubcollection("miembros") { repository.observeMembers(it) }
+
+    val allCategories: StateFlow<List<FamilyCategory>> =
+        observeFamilySubcollection("categorías") { repository.observeCategories(it) }
+
+    val productHistory: StateFlow<List<ProductHistoryEntry>> =
+        observeFamilySubcollection("historial de productos") { repository.observeProductHistory(it) }
 
     val rawShoppingItems: StateFlow<List<ShoppingItem>> =
         observeFamilySubcollection("compra") { repository.observeShoppingItems(it) }
@@ -362,7 +390,9 @@ class FamilyWallViewModel(
         _shoppingSearchQuery
     ) { items, superMarket, priority, query ->
         items.filter { item ->
-            val matchesSupermarket = superMarket == "Todos" || item.supermarket.equals(superMarket, ignoreCase = true)
+            val normalizedItemSuper = Supermarket.fromString(item.supermarket).displayName
+            val matchesSupermarket = superMarket == "Todos" ||
+                normalizedItemSuper.equals(superMarket, ignoreCase = true)
             val matchesPriority = when (priority) {
                 "Todos" -> true
                 "Urgente" -> item.priority == "URGENTE"
@@ -374,7 +404,8 @@ class FamilyWallViewModel(
             }
             val matchesQuery = query.isBlank() ||
                 item.name.contains(query, ignoreCase = true) ||
-                item.category.contains(query, ignoreCase = true)
+                item.category.contains(query, ignoreCase = true) ||
+                item.assignedMemberName.contains(query, ignoreCase = true)
             matchesSupermarket && matchesPriority && matchesQuery
         }.sortedWith(compareBy<ShoppingItem> { it.checked }.thenByDescending { it.createdAt?.seconds ?: 0L })
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), emptyList())
@@ -421,6 +452,44 @@ class FamilyWallViewModel(
         return profileName?.takeIf { it.isNotBlank() } ?: allMembers.value.firstOrNull()?.name ?: "Familia"
     }
 
+    // --- CATEGORY ACTIONS ---
+
+    fun addCategory(scope: CategoryScope, name: String, emoji: String, colorHex: String) {
+        val fam = currentFamily() ?: return
+        viewModelScope.launch {
+            repository.addCategory(fam.id, fam.memberUids, scope, name, emoji, colorHex)
+                .onSuccess { emitMessage("Categoría '${name.trim()}' añadida") }
+                .onFailure { emitMessage("No se pudo añadir la categoría") }
+        }
+    }
+
+    fun updateCategory(category: FamilyCategory, oldName: String) {
+        val fam = currentFamily() ?: return
+        viewModelScope.launch {
+            repository.updateCategory(fam.id, category, oldName)
+                .onSuccess { emitMessage("Categoría '${category.name.trim()}' actualizada") }
+                .onFailure { emitMessage("No se pudo actualizar la categoría") }
+        }
+    }
+
+    fun deleteCategory(category: FamilyCategory) {
+        val fam = currentFamily() ?: return
+        viewModelScope.launch {
+            repository.deleteCategory(fam.id, category.id)
+                .onSuccess { emitMessage("Categoría '${category.name}' eliminada") }
+                .onFailure { emitMessage("No se pudo eliminar la categoría") }
+        }
+    }
+
+    fun restoreDefaultCategories() {
+        val fam = currentFamily() ?: return
+        viewModelScope.launch {
+            repository.seedDefaultCategoriesIfNeeded(fam.id, fam.memberUids, onlyIfCompletelyEmpty = false)
+                .onSuccess { emitMessage("Categorías predeterminadas restauradas") }
+                .onFailure { emitMessage("No se pudieron restaurar las categorías") }
+        }
+    }
+
     // --- MEMBERS ACTIONS ---
 
     fun addDependentMember(name: String, role: String, emoji: String, colorHex: String) {
@@ -450,10 +519,21 @@ class FamilyWallViewModel(
                     category = draft.category,
                     checked = false,
                     addedByMemberName = draft.addedByMemberName,
+                    assignedMemberName = draft.assignedMemberName,
                     notes = draft.notes.trim()
                 )
                 repository.addShoppingItem(fam.id, fam.memberUids, item)
-                    .onSuccess { emitMessage("Añadido '${draft.name.trim()}' a la compra") }
+                    .onSuccess {
+                        repository.recordProductHistory(
+                            familyId = fam.id,
+                            memberUids = fam.memberUids,
+                            name = draft.name,
+                            unit = draft.unit,
+                            category = draft.category,
+                            supermarket = draft.supermarket.displayName
+                        )
+                        emitMessage("Añadido '${draft.name.trim()}' a la compra")
+                    }
                     .onFailure { emitMessage("No se pudo guardar el producto") }
             } else {
                 val updated = editing.copy(
@@ -466,10 +546,21 @@ class FamilyWallViewModel(
                     offerDetails = if (draft.hasOffer) draft.offerDetails.trim() else "",
                     category = draft.category,
                     addedByMemberName = draft.addedByMemberName,
+                    assignedMemberName = draft.assignedMemberName,
                     notes = draft.notes.trim()
                 )
                 repository.updateShoppingItem(fam.id, updated)
-                    .onSuccess { emitMessage("Producto '${draft.name.trim()}' actualizado") }
+                    .onSuccess {
+                        repository.recordProductHistory(
+                            familyId = fam.id,
+                            memberUids = fam.memberUids,
+                            name = draft.name,
+                            unit = draft.unit,
+                            category = draft.category,
+                            supermarket = draft.supermarket.displayName
+                        )
+                        emitMessage("Producto '${draft.name.trim()}' actualizado")
+                    }
                     .onFailure { emitMessage("No se pudo actualizar el producto") }
             }
         }
@@ -582,6 +673,7 @@ class FamilyWallViewModel(
     fun saveCalendarEvent(draft: CalendarEventDraft, editing: CalendarEvent?) {
         val fam = currentFamily() ?: return
         viewModelScope.launch {
+            val reminders = draft.reminderMinutesList.distinct().ifEmpty { listOf(draft.reminderMinutesBefore) }
             if (editing == null) {
                 val entity = CalendarEvent(
                     familyId = fam.id,
@@ -589,16 +681,21 @@ class FamilyWallViewModel(
                     description = draft.description.trim(),
                     location = draft.location.trim(),
                     dateEpochMillis = draft.dateEpochMillis,
-                    startTime = draft.startTime,
-                    endTime = draft.endTime,
+                    endDateEpochMillis = draft.endDateEpochMillis,
+                    extraDatesEpochMillis = draft.extraDatesEpochMillis,
+                    allDay = draft.allDay,
+                    startTime = if (draft.allDay) "00:00" else draft.startTime,
+                    endTime = if (draft.allDay) "23:59" else draft.endTime,
                     assignedMemberName = draft.assignedMemberName,
                     memberColorHex = draft.memberColorHex,
-                    category = draft.category.name,
-                    reminderMinutesBefore = draft.reminderMinutesBefore,
+                    category = draft.category.trim().ifBlank { "General" },
+                    reminderMinutesBefore = reminders.first(),
+                    reminderMinutesList = reminders,
                     notified = false
                 )
                 repository.addEvent(fam.id, fam.memberUids, entity)
                     .onSuccess { created ->
+                        notificationManager.scheduleEventReminders(created)
                         notificationManager.showEventNotification(created)
                         emitMessage("Evento '${draft.title.trim()}' guardado")
                     }
@@ -609,15 +706,22 @@ class FamilyWallViewModel(
                     description = draft.description.trim(),
                     location = draft.location.trim(),
                     dateEpochMillis = draft.dateEpochMillis,
-                    startTime = draft.startTime,
-                    endTime = draft.endTime,
+                    endDateEpochMillis = draft.endDateEpochMillis,
+                    extraDatesEpochMillis = draft.extraDatesEpochMillis,
+                    allDay = draft.allDay,
+                    startTime = if (draft.allDay) "00:00" else draft.startTime,
+                    endTime = if (draft.allDay) "23:59" else draft.endTime,
                     assignedMemberName = draft.assignedMemberName,
                     memberColorHex = draft.memberColorHex,
-                    category = draft.category.name,
-                    reminderMinutesBefore = draft.reminderMinutesBefore
+                    category = draft.category.trim().ifBlank { "General" },
+                    reminderMinutesBefore = reminders.first(),
+                    reminderMinutesList = reminders
                 )
                 repository.updateEvent(fam.id, updated)
-                    .onSuccess { emitMessage("Evento actualizado") }
+                    .onSuccess { saved ->
+                        notificationManager.scheduleEventReminders(saved)
+                        emitMessage("Evento actualizado")
+                    }
                     .onFailure { emitMessage("No se pudo actualizar el evento") }
             }
         }
@@ -626,6 +730,7 @@ class FamilyWallViewModel(
     fun deleteCalendarEvent(event: CalendarEvent) {
         val fam = currentFamily() ?: return
         viewModelScope.launch {
+            notificationManager.cancelEventReminders(event.id)
             repository.deleteEvent(fam.id, event.id)
                 .onFailure { emitMessage("No se pudo eliminar el evento") }
         }
@@ -749,7 +854,7 @@ class FamilyWallViewModel(
     ) {
         val fam = currentFamily() ?: return
         val lines = selectedIngredients
-            ?: recipe.ingredients.split("\n", ",").map { it.trim() }.filter { it.isNotBlank() }
+            ?: recipe.ingredients.split("\n").map { it.trim() }.filter { it.isNotBlank() }
         viewModelScope.launch {
             repository.addSelectedIngredientsToShoppingList(
                 familyId = fam.id,

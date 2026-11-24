@@ -3,13 +3,18 @@ package com.example.data.repository
 import android.content.Context
 import com.example.R
 import com.example.data.model.CalendarEvent
+import com.example.data.model.CategoryScope
 import com.example.data.model.CustomList
 import com.example.data.model.CustomListItem
+import com.example.data.model.DefaultCategories
+import com.example.data.model.FamilyCategory
 import com.example.data.model.FamilyMember
 import com.example.data.model.FamilyTask
 import com.example.data.model.FamilyUnit
 import com.example.data.model.MealPlan
+import com.example.data.model.ProductHistoryEntry
 import com.example.data.model.Recipe
+import com.example.data.model.RecipeFormatters
 import com.example.data.model.ShoppingItem
 import com.example.data.model.UserProfile
 import com.google.firebase.Firebase
@@ -475,7 +480,9 @@ class FirestoreRepository(
             "calendarEvents",
             "tasks",
             "mealPlans",
-            "recipes"
+            "recipes",
+            "categories",
+            "productHistory"
         )
         try {
             val refsToUpdate = mutableListOf<DocumentReference>()
@@ -578,6 +585,7 @@ class FirestoreRepository(
                     "category" to item.category.trim().take(60),
                     "checked" to false,
                     "addedByMemberName" to item.addedByMemberName.trim().take(40),
+                    "assignedMemberName" to item.assignedMemberName.trim().ifBlank { "Todos" }.take(40),
                     "notes" to item.notes.trim().take(300),
                     "createdByUid" to uid,
                     "memberUids" to memberUids,
@@ -611,6 +619,7 @@ class FirestoreRepository(
                     "category" to item.category.trim().take(60),
                     "checked" to item.checked,
                     "addedByMemberName" to item.addedByMemberName.trim().take(40),
+                    "assignedMemberName" to item.assignedMemberName.trim().ifBlank { "Todos" }.take(40),
                     "notes" to item.notes.trim().take(300),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
@@ -709,14 +718,15 @@ class FirestoreRepository(
             cleaned.chunked(400).forEach { chunk ->
                 val batch = db.batch()
                 chunk.forEach { line ->
+                    val (parsedName, parsedQty, parsedUnit) = RecipeFormatters.parseIngredientForShopping(line)
                     val docRef = db.collection("families").document(familyId).collection("shoppingItems").document()
                     batch.set(
                         docRef,
                         mapOf(
                             "familyId" to familyId,
-                            "name" to line.take(120),
-                            "quantity" to 1.0,
-                            "unit" to "ud",
+                            "name" to parsedName,
+                            "quantity" to parsedQty,
+                            "unit" to parsedUnit,
                             "supermarket" to supermarket.take(40),
                             "priority" to "NORMAL",
                             "hasOffer" to false,
@@ -724,6 +734,7 @@ class FirestoreRepository(
                             "category" to "Recetas ($recipeTitle)".take(60),
                             "checked" to false,
                             "addedByMemberName" to addedByMemberName.take(40),
+                            "assignedMemberName" to "Todos",
                             "notes" to "Para: $recipeTitle".take(300),
                             "createdByUid" to uid,
                             "memberUids" to memberUids,
@@ -904,6 +915,15 @@ class FirestoreRepository(
         val docRef = db.collection("families").document(familyId).collection("calendarEvents").document()
         return try {
             val uid = requireUserId()
+            val reminders = event.reminderMinutesList.distinct().take(10)
+                .ifEmpty { listOf(event.reminderMinutesBefore.coerceIn(0, 10080)) }
+            val primaryReminder = reminders.first().coerceIn(0, 10080)
+            val cleanCategory = event.category.trim().ifBlank { "General" }.take(40)
+            val extras = event.extraDatesEpochMillis.take(31)
+            val endMillis = event.endDateEpochMillis.coerceAtLeast(0L)
+            val sTime = if (event.allDay) "00:00" else event.startTime.trim().ifBlank { "09:00" }.take(10)
+            val eTime = if (event.allDay) "23:59" else event.endTime.trim().ifBlank { "10:00" }.take(10)
+
             docRef.set(
                 mapOf(
                     "familyId" to familyId,
@@ -911,12 +931,16 @@ class FirestoreRepository(
                     "description" to event.description.trim().take(400),
                     "location" to event.location.trim().take(150),
                     "dateEpochMillis" to event.dateEpochMillis,
-                    "startTime" to event.startTime.trim().take(10),
-                    "endTime" to event.endTime.trim().take(10),
+                    "endDateEpochMillis" to endMillis,
+                    "extraDatesEpochMillis" to extras,
+                    "allDay" to event.allDay,
+                    "startTime" to sTime,
+                    "endTime" to eTime,
                     "assignedMemberName" to event.assignedMemberName.trim().take(40),
                     "memberColorHex" to event.memberColorHex.trim().take(16),
-                    "category" to event.category.trim().take(30),
-                    "reminderMinutesBefore" to event.reminderMinutesBefore.coerceIn(0, 10080),
+                    "category" to cleanCategory,
+                    "reminderMinutesBefore" to primaryReminder,
+                    "reminderMinutesList" to reminders,
                     "notified" to false,
                     "createdByUid" to uid,
                     "memberUids" to memberUids,
@@ -924,7 +948,21 @@ class FirestoreRepository(
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()
-            Result.success(event.copy(id = docRef.id, familyId = familyId, createdByUid = uid, memberUids = memberUids))
+            Result.success(
+                event.copy(
+                    id = docRef.id,
+                    familyId = familyId,
+                    endDateEpochMillis = endMillis,
+                    extraDatesEpochMillis = extras,
+                    startTime = sTime,
+                    endTime = eTime,
+                    category = cleanCategory,
+                    reminderMinutesBefore = primaryReminder,
+                    reminderMinutesList = reminders,
+                    createdByUid = uid,
+                    memberUids = memberUids
+                )
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -933,28 +971,51 @@ class FirestoreRepository(
         }
     }
 
-    suspend fun updateEvent(familyId: String, event: CalendarEvent): Result<Unit> {
+    suspend fun updateEvent(familyId: String, event: CalendarEvent): Result<CalendarEvent> {
         val docRef = db.collection("families").document(familyId).collection("calendarEvents").document(event.id)
         return try {
             requireUserId()
             require(event.id.isNotBlank())
+            val reminders = event.reminderMinutesList.distinct().take(10)
+                .ifEmpty { listOf(event.reminderMinutesBefore.coerceIn(0, 10080)) }
+            val primaryReminder = reminders.first().coerceIn(0, 10080)
+            val cleanCategory = event.category.trim().ifBlank { "General" }.take(40)
+            val extras = event.extraDatesEpochMillis.take(31)
+            val endMillis = event.endDateEpochMillis.coerceAtLeast(0L)
+            val sTime = if (event.allDay) "00:00" else event.startTime.trim().ifBlank { "09:00" }.take(10)
+            val eTime = if (event.allDay) "23:59" else event.endTime.trim().ifBlank { "10:00" }.take(10)
+
             docRef.update(
                 mapOf(
                     "title" to event.title.trim().take(120),
                     "description" to event.description.trim().take(400),
                     "location" to event.location.trim().take(150),
                     "dateEpochMillis" to event.dateEpochMillis,
-                    "startTime" to event.startTime.trim().take(10),
-                    "endTime" to event.endTime.trim().take(10),
+                    "endDateEpochMillis" to endMillis,
+                    "extraDatesEpochMillis" to extras,
+                    "allDay" to event.allDay,
+                    "startTime" to sTime,
+                    "endTime" to eTime,
                     "assignedMemberName" to event.assignedMemberName.trim().take(40),
                     "memberColorHex" to event.memberColorHex.trim().take(16),
-                    "category" to event.category.trim().take(30),
-                    "reminderMinutesBefore" to event.reminderMinutesBefore.coerceIn(0, 10080),
+                    "category" to cleanCategory,
+                    "reminderMinutesBefore" to primaryReminder,
+                    "reminderMinutesList" to reminders,
                     "notified" to event.notified,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()
-            Result.success(Unit)
+            Result.success(
+                event.copy(
+                    endDateEpochMillis = endMillis,
+                    extraDatesEpochMillis = extras,
+                    startTime = sTime,
+                    endTime = eTime,
+                    category = cleanCategory,
+                    reminderMinutesBefore = primaryReminder,
+                    reminderMinutesList = reminders
+                )
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1098,7 +1159,7 @@ class FirestoreRepository(
                 val existing = docRef.get().await()
                 if (existing.exists()) {
                     val updates = mutableMapOf<String, Any>(
-                        "dayOfWeekIndex" to dayOfWeekIndex.coerceIn(0, 6),
+                        "dayOfWeekIndex" to dayOfWeekIndex.coerceIn(0, 13),
                         "mealType" to mealType,
                         "dishName" to trimmed,
                         "notes" to "",
@@ -1113,7 +1174,7 @@ class FirestoreRepository(
                 } else {
                     val payload = mutableMapOf<String, Any>(
                         "familyId" to familyId,
-                        "dayOfWeekIndex" to dayOfWeekIndex.coerceIn(0, 6),
+                        "dayOfWeekIndex" to dayOfWeekIndex.coerceIn(0, 13),
                         "mealType" to mealType,
                         "dishName" to trimmed,
                         "notes" to "",
@@ -1227,6 +1288,246 @@ class FirestoreRepository(
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.DELETE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
+    // --- CUSTOMIZABLE CATEGORIES ---
+
+    fun observeCategories(familyId: String): Flow<List<FamilyCategory>> =
+        observeCollection(familyId, "categories", FamilyCategory::class.java)
+
+    suspend fun seedDefaultCategoriesIfNeeded(
+        familyId: String,
+        memberUids: List<String>,
+        onlyIfCompletelyEmpty: Boolean
+    ): Result<Unit> {
+        val colRef = db.collection("families").document(familyId).collection("categories")
+        return try {
+            val uid = requireUserId()
+            val snap = colRef.whereArrayContains("memberUids", uid).get().await()
+            if (onlyIfCompletelyEmpty && !snap.isEmpty) {
+                return Result.success(Unit)
+            }
+            val existingIds = snap.documents.map { it.id }.toSet()
+            val existingKeys = snap.documents.map {
+                "${it.getString("scope").orEmpty()}:${it.getString("name").orEmpty().lowercase()}"
+            }.toSet()
+
+            val toSeed = DefaultCategories.all.filter { tpl ->
+                val docId = "seed_${tpl.idSuffix}"
+                val key = "${tpl.scope.name}:${tpl.name.lowercase()}"
+                docId !in existingIds && key !in existingKeys
+            }
+            if (toSeed.isEmpty()) return Result.success(Unit)
+
+            toSeed.chunked(400).forEach { chunk ->
+                val batch = db.batch()
+                chunk.forEach { tpl ->
+                    val ref = colRef.document("seed_${tpl.idSuffix}")
+                    batch.set(
+                        ref,
+                        mapOf(
+                            "familyId" to familyId,
+                            "scope" to tpl.scope.name,
+                            "name" to tpl.name,
+                            "emoji" to tpl.emoji,
+                            "colorHex" to tpl.colorHex,
+                            "createdByUid" to uid,
+                            "memberUids" to memberUids,
+                            "createdAt" to FieldValue.serverTimestamp(),
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
+                batch.commit().await()
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, "families/$familyId/categories")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun addCategory(
+        familyId: String,
+        memberUids: List<String>,
+        scope: CategoryScope,
+        name: String,
+        emoji: String,
+        colorHex: String
+    ): Result<Unit> {
+        val docRef = db.collection("families").document(familyId).collection("categories").document()
+        return try {
+            val uid = requireUserId()
+            val cleanName = name.trim().take(40)
+            require(cleanName.isNotBlank()) { "El nombre de la categoría no puede estar vacío." }
+            docRef.set(
+                mapOf(
+                    "familyId" to familyId,
+                    "scope" to scope.name,
+                    "name" to cleanName,
+                    "emoji" to emoji.trim().ifBlank { "🏷️" }.take(16),
+                    "colorHex" to colorHex.trim().ifBlank { "#1B4D3E" }.take(16),
+                    "createdByUid" to uid,
+                    "memberUids" to memberUids,
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateCategory(
+        familyId: String,
+        category: FamilyCategory,
+        oldName: String
+    ): Result<Unit> {
+        val docRef = db.collection("families").document(familyId).collection("categories").document(category.id)
+        return try {
+            val uid = requireUserId()
+            require(category.id.isNotBlank())
+            val cleanName = category.name.trim().take(40)
+            require(cleanName.isNotBlank()) { "El nombre de la categoría no puede estar vacío." }
+            docRef.update(
+                mapOf(
+                    "name" to cleanName,
+                    "emoji" to category.emoji.trim().ifBlank { "🏷️" }.take(16),
+                    "colorHex" to category.colorHex.trim().ifBlank { "#1B4D3E" }.take(16),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+
+            // Propagate rename to matching items of that scope
+            if (oldName.isNotBlank() && !oldName.equals(cleanName, ignoreCase = false)) {
+                val targetCol = when (category.scope) {
+                    CategoryScope.EVENT.name -> "calendarEvents"
+                    CategoryScope.TASK.name -> "tasks"
+                    CategoryScope.SHOPPING.name -> "shoppingItems"
+                    CategoryScope.RECIPE.name -> "recipes"
+                    else -> null
+                }
+                if (targetCol != null) {
+                    val snap = db.collection("families")
+                        .document(familyId)
+                        .collection(targetCol)
+                        .whereArrayContains("memberUids", uid)
+                        .get()
+                        .await()
+                    val matchingRefs = snap.documents.filter {
+                        it.getString("category")?.equals(oldName, ignoreCase = true) == true
+                    }.map { it.reference }
+                    matchingRefs.chunked(400).forEach { chunk ->
+                        val batch = db.batch()
+                        chunk.forEach { ref ->
+                            batch.update(
+                                ref,
+                                mapOf(
+                                    "category" to cleanName,
+                                    "updatedAt" to FieldValue.serverTimestamp()
+                                )
+                            )
+                        }
+                        batch.commit().await()
+                    }
+                }
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteCategory(familyId: String, categoryId: String): Result<Unit> {
+        val docRef = db.collection("families").document(familyId).collection("categories").document(categoryId)
+        return try {
+            requireUserId()
+            docRef.delete().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
+    // --- PRODUCT AUTOCOMPLETE HISTORY ---
+
+    fun observeProductHistory(familyId: String): Flow<List<ProductHistoryEntry>> =
+        observeCollection(familyId, "productHistory", ProductHistoryEntry::class.java)
+
+    suspend fun recordProductHistory(
+        familyId: String,
+        memberUids: List<String>,
+        name: String,
+        unit: String,
+        category: String,
+        supermarket: String
+    ): Result<Unit> {
+        val cleanName = name.trim().take(120)
+        if (cleanName.isBlank()) return Result.success(Unit)
+        val cleanLower = cleanName.lowercase()
+        val slug = cleanLower
+            .replace(Regex("[^a-z0-9]+"), "_")
+            .trim('_')
+            .take(80)
+            .ifBlank { cleanLower.hashCode().toUInt().toString() }
+        val docId = "prod_$slug"
+        val docRef = db.collection("families").document(familyId).collection("productHistory").document(docId)
+        return try {
+            val uid = requireUserId()
+            val cleanUnit = unit.trim().ifBlank { "ud" }.take(20)
+            val cleanCat = category.trim().ifBlank { "Despensa" }.take(60)
+            val cleanSuper = supermarket.trim().ifBlank { "Mercadona" }.take(40)
+
+            val snap = docRef.get().await()
+            if (snap.exists()) {
+                val prevCount = (snap.getLong("useCount") ?: 0L).toInt()
+                docRef.update(
+                    mapOf(
+                        "name" to cleanName,
+                        "nameLower" to cleanLower,
+                        "lastUnit" to cleanUnit,
+                        "lastCategory" to cleanCat,
+                        "lastSupermarket" to cleanSuper,
+                        "useCount" to (prevCount + 1).coerceIn(1, 100000),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } else {
+                docRef.set(
+                    mapOf(
+                        "familyId" to familyId,
+                        "name" to cleanName,
+                        "nameLower" to cleanLower,
+                        "lastUnit" to cleanUnit,
+                        "lastCategory" to cleanCat,
+                        "lastSupermarket" to cleanSuper,
+                        "useCount" to 1,
+                        "createdByUid" to uid,
+                        "memberUids" to memberUids,
+                        "createdAt" to FieldValue.serverTimestamp(),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docRef.path)
             Result.failure(e)
         }
     }

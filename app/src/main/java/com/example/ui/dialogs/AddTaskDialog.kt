@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -17,14 +18,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,20 +46,32 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.CategoryScope
+import com.example.data.model.DefaultCategories
+import com.example.data.model.FamilyCategory
 import com.example.data.model.FamilyMember
 import com.example.data.model.FamilyTask
 import com.example.data.model.TaskPriority
 import com.example.ui.TaskDraft
 import com.example.ui.theme.PriorityUrgente
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun AddTaskDialog(
     members: List<FamilyMember>,
+    categories: List<FamilyCategory>,
     initialTask: FamilyTask? = null,
+    onManageCategories: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (TaskDraft) -> Unit
 ) {
+    val availableCategories = remember(categories) {
+        categories.ifEmpty { DefaultCategories.forScope(CategoryScope.TASK) }
+    }
+
     var title by remember(initialTask) { mutableStateOf(initialTask?.title ?: "") }
     var description by remember(initialTask) { mutableStateOf(initialTask?.description ?: "") }
     var assignedMemberName by remember(initialTask) {
@@ -61,14 +80,20 @@ fun AddTaskDialog(
     var assignedEmoji by remember(initialTask) {
         mutableStateOf(initialTask?.assignedMemberEmoji ?: members.firstOrNull()?.avatarEmoji ?: "⭐")
     }
-    var dueDate by remember(initialTask) { mutableStateOf(initialTask?.dueDate ?: "Hoy") }
+    var dueDate by remember(initialTask) { mutableStateOf(initialTask?.dueDate ?: "Sin fecha") }
     var priority by remember(initialTask) {
         mutableStateOf(initialTask?.let { TaskPriority.fromString(it.priority) } ?: TaskPriority.MEDIA)
     }
-    var category by remember(initialTask) { mutableStateOf(initialTask?.category ?: "Hogar") }
+    var category by remember(initialTask, availableCategories) {
+        mutableStateOf(
+            initialTask?.category?.takeIf { it.isNotBlank() }
+                ?: availableCategories.firstOrNull()?.name
+                ?: "Hogar"
+        )
+    }
+    var showDatePicker by remember { mutableStateOf(false) }
 
     val dueOptions = listOf("Hoy", "Mañana", "Esta semana", "Fin de semana", "Sin fecha")
-    val categories = listOf("Hogar", "Colegio", "Coche", "Deporte", "Compras", "Mascotas", "Salud")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -148,27 +173,50 @@ fun AddTaskDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    dueOptions.take(4).forEach { option ->
+                    dueOptions.forEach { option ->
                         val isSelected = dueDate == option
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier
-                                .weight(1f)
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable { dueDate = option }
+                                .testTag("task_due_${option.lowercase().replace(" ", "_")}")
                         ) {
                             Text(
                                 text = option,
                                 fontSize = 11.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
-                                textAlign = TextAlign.Center
+                                modifier = Modifier.padding(vertical = 7.dp, horizontal = 10.dp)
+                            )
+                        }
+                    }
+
+                    val isCustomDate = dueDate !in dueOptions
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isCustomDate) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showDatePicker = true }
+                            .testTag("task_due_custom_date")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 7.dp, horizontal = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isCustomDate) dueDate else "Elegir día",
+                                fontSize = 11.sp,
+                                fontWeight = if (isCustomDate) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isCustomDate) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -215,27 +263,60 @@ fun AddTaskDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                Text(
-                    text = "Área / Categoría",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Área / Categoría",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onManageCategories)
+                            .testTag("manage_task_categories_btn")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Outlined.Edit,
+                                contentDescription = "Editar categorías",
+                                modifier = Modifier.size(12.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Editar categorías",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(6.dp))
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    categories.forEach { cat ->
-                        val isSelected = category == cat
+                    availableCategories.forEach { cat ->
+                        val isSelected = category.equals(cat.name, ignoreCase = true)
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { category = cat }
+                                .clickable { category = cat.name }
                         ) {
                             Text(
-                                text = cat,
+                                text = "${cat.emoji} ${cat.name}",
                                 fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -286,4 +367,27 @@ fun AddTaskDialog(
             }
         }
     )
+
+    if (showDatePicker) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis())
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        state.selectedDateMillis?.let { millis ->
+                            dueDate = SimpleDateFormat("d MMM", Locale("es", "ES"))
+                                .format(Date(millis))
+                        }
+                        showDatePicker = false
+                    }
+                ) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
+            }
+        ) {
+            DatePicker(state = state)
+        }
+    }
 }

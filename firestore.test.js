@@ -243,6 +243,7 @@ test("Shopping items, tasks, custom lists, calendar events, meal plans, recipes 
       category: "Lácteos",
       checked: false,
       addedByMemberName: "Alice",
+      assignedMemberName: "Alice",
       notes: "",
       createdByUid: ALICE_UID,
       memberUids: [ALICE_UID],
@@ -251,7 +252,7 @@ test("Shopping items, tasks, custom lists, calendar events, meal plans, recipes 
     })
   );
   await assertSucceeds(shopRef.update({ checked: true, updatedAt: past() }));
-  await assertSucceeds(shopRef.update({ name: "Leche semidesnatada", quantity: 3, updatedAt: past() }));
+  await assertSucceeds(shopRef.update({ name: "Leche semidesnatada", quantity: 3, assignedMemberName: "Todos", updatedAt: past() }));
   // Reject ghost field
   await assertFails(shopRef.update({ ghost: true, updatedAt: past() }));
 
@@ -309,20 +310,25 @@ test("Shopping items, tasks, custom lists, calendar events, meal plans, recipes 
   );
   await assertSucceeds(listItemRef.update({ checked: true, updatedAt: past() }));
 
-  // 4. Calendar event, meal plan, recipe
+  // 4. Calendar event (multi-day, allDay, multi-reminders), meal plan (2 weeks), recipe, categories, product history
+  const evRef = aliceDb.collection("families").doc("fam_1").collection("calendarEvents").doc("ev_1");
   await assertSucceeds(
-    aliceDb.collection("families").doc("fam_1").collection("calendarEvents").doc("ev_1").set({
+    evRef.set({
       familyId: "fam_1",
-      title: "Pediatra",
+      title: "Escapada rural",
       description: "Revisión",
-      location: "Centro de salud",
+      location: "Sierra",
       dateEpochMillis: Date.now(),
-      startTime: "17:00",
-      endTime: "18:00",
-      assignedMemberName: "Alice",
+      endDateEpochMillis: Date.now() + 2 * 86400000,
+      extraDatesEpochMillis: [],
+      allDay: true,
+      startTime: "00:00",
+      endTime: "23:59",
+      assignedMemberName: "Todos",
       memberColorHex: "#1B4D3E",
-      category: "SALUD",
-      reminderMinutesBefore: 30,
+      category: "Ocio familiar",
+      reminderMinutesBefore: 1440,
+      reminderMinutesList: [1440, 2880, 10080],
       notified: false,
       createdByUid: ALICE_UID,
       memberUids: [ALICE_UID],
@@ -332,11 +338,11 @@ test("Shopping items, tasks, custom lists, calendar events, meal plans, recipes 
   );
 
   await assertSucceeds(
-    aliceDb.collection("families").doc("fam_1").collection("mealPlans").doc("mp_0_COMIDA").set({
+    aliceDb.collection("families").doc("fam_1").collection("mealPlans").doc("slot_12_CENA").set({
       familyId: "fam_1",
-      dayOfWeekIndex: 0,
-      mealType: "COMIDA",
-      dishName: "Lentejas",
+      dayOfWeekIndex: 12,
+      mealType: "CENA",
+      dishName: "Salmón al horno",
       notes: "",
       createdByUid: ALICE_UID,
       memberUids: [ALICE_UID],
@@ -352,8 +358,8 @@ test("Shopping items, tasks, custom lists, calendar events, meal plans, recipes 
       category: "Cenas Rápidas",
       prepTimeMinutes: 25,
       servings: 4,
-      ingredients: "4 patatas\n5 huevos\n1 cebolla",
-      instructions: "Freír y cuajar.",
+      ingredients: "4 ud · Patatas\n5 ud · Huevos",
+      instructions: "1. Freír.\n2. Cuajar.",
       emoji: "🍳",
       favorite: true,
       createdByUid: ALICE_UID,
@@ -362,4 +368,39 @@ test("Shopping items, tasks, custom lists, calendar events, meal plans, recipes 
       updatedAt: now,
     })
   );
+
+  const catRef = aliceDb.collection("families").doc("fam_1").collection("categories").doc("cat_1");
+  await assertSucceeds(
+    catRef.set({
+      familyId: "fam_1",
+      scope: "TASK",
+      name: "Jardín",
+      emoji: "🌱",
+      colorHex: "#157A4B",
+      createdByUid: ALICE_UID,
+      memberUids: [ALICE_UID],
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await assertSucceeds(catRef.update({ name: "Terraza y jardín", updatedAt: past() }));
+  await assertSucceeds(catRef.delete());
+
+  const histRef = aliceDb.collection("families").doc("fam_1").collection("productHistory").doc("prod_leche_entera");
+  await assertSucceeds(
+    histRef.set({
+      familyId: "fam_1",
+      name: "Leche entera",
+      nameLower: "leche entera",
+      lastUnit: "L",
+      lastCategory: "Lácteos",
+      lastSupermarket: "Mercadona",
+      useCount: 1,
+      createdByUid: ALICE_UID,
+      memberUids: [ALICE_UID],
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await assertSucceeds(histRef.update({ useCount: 2, updatedAt: past() }));
 });

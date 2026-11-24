@@ -75,6 +75,7 @@
         "category": { "type": "string" },
         "checked": { "type": "boolean" },
         "addedByMemberName": { "type": "string" },
+        "assignedMemberName": { "type": "string" },
         "notes": { "type": "string" },
         "createdByUid": { "type": "string" },
         "memberUids": { "type": "array" },
@@ -128,12 +129,16 @@
         "description": { "type": "string" },
         "location": { "type": "string" },
         "dateEpochMillis": { "type": "integer" },
+        "endDateEpochMillis": { "type": "integer" },
+        "extraDatesEpochMillis": { "type": "array" },
+        "allDay": { "type": "boolean" },
         "startTime": { "type": "string" },
         "endTime": { "type": "string" },
         "assignedMemberName": { "type": "string" },
         "memberColorHex": { "type": "string" },
         "category": { "type": "string" },
         "reminderMinutesBefore": { "type": "integer" },
+        "reminderMinutesList": { "type": "array" },
         "notified": { "type": "boolean" },
         "createdByUid": { "type": "string" },
         "memberUids": { "type": "array" },
@@ -201,6 +206,42 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["familyId", "title", "category", "prepTimeMinutes", "servings", "ingredients", "instructions", "emoji", "favorite", "createdByUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "FamilyCategory": {
+      "title": "FamilyCategory",
+      "description": "Editable per-family category for events, tasks, shopping, or recipes.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "scope": { "type": "string", "enum": ["EVENT", "TASK", "SHOPPING", "RECIPE"] },
+        "name": { "type": "string" },
+        "emoji": { "type": "string" },
+        "colorHex": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "scope", "name", "emoji", "colorHex", "createdByUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "ProductHistoryEntry": {
+      "title": "ProductHistoryEntry",
+      "description": "Shared autocomplete history for previously entered shopping items.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "name": { "type": "string" },
+        "nameLower": { "type": "string" },
+        "lastUnit": { "type": "string" },
+        "lastCategory": { "type": "string" },
+        "lastSupermarket": { "type": "string" },
+        "useCount": { "type": "integer" },
+        "createdByUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "name", "nameLower", "lastUnit", "lastCategory", "lastSupermarket", "useCount", "createdByUid", "memberUids", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -242,11 +283,19 @@
     },
     "/families/{familyId}/mealPlans/{mealPlanId}": {
       "schema": { "$ref": "#/entities/MealPlan" },
-      "description": "Weekly family meal plans."
+      "description": "Biweekly family meal plans."
     },
     "/families/{familyId}/recipes/{recipeId}": {
       "schema": { "$ref": "#/entities/Recipe" },
       "description": "Shared family recipe book."
+    },
+    "/families/{familyId}/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/FamilyCategory" },
+      "description": "Editable categories per module scope."
+    },
+    "/families/{familyId}/productHistory/{entryId}": {
+      "schema": { "$ref": "#/entities/ProductHistoryEntry" },
+      "description": "Autocomplete shopping product history."
     }
   }
 }

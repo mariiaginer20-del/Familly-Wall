@@ -124,7 +124,6 @@ val BentoDarkOutlineVariant = Color(0xFF282E38)
 val ColorMercadona = Color(0xFF157A4B)
 val ColorCarrefour = Color(0xFF1D4E89)
 val ColorLidl = Color(0xFF24529E)
-val ColorAlcampo = Color(0xFFB9382C)
 val ColorOtherSupermarket = Color(0xFF5C554E)
 
 // Priority & Tag Tokens

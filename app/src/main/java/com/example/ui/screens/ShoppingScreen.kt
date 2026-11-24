@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DeleteSweep
@@ -72,6 +73,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.model.CategoryScope
 import com.example.data.model.CustomList
 import com.example.data.model.CustomListItem
 import com.example.data.model.FamilyMember
@@ -80,7 +82,6 @@ import com.example.data.model.Supermarket
 import com.example.data.preferences.AppDesignStyle
 import com.example.ui.CustomListItemDraft
 import com.example.ui.FamilyWallViewModel
-import com.example.ui.theme.ColorAlcampo
 import com.example.ui.theme.ColorCarrefour
 import com.example.ui.theme.ColorLidl
 import com.example.ui.theme.ColorMercadona
@@ -231,24 +232,36 @@ fun ShoppingScreen(
                         )
                     }
 
-                    if (completedCount > 0) {
-                        OutlinedButton(
-                            onClick = { viewModel.clearCheckedShoppingItems() },
-                            modifier = Modifier.height(34.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { viewModel.openManageCategories(CategoryScope.SHOPPING) },
+                            modifier = Modifier.testTag("shopping_manage_categories_btn")
                         ) {
                             Icon(
-                                Icons.Outlined.DeleteSweep,
-                                contentDescription = null,
-                                modifier = Modifier.size(15.dp),
-                                tint = MaterialTheme.colorScheme.error
+                                imageVector = Icons.Outlined.Category,
+                                contentDescription = "Gestionar categorías de compra",
+                                tint = MaterialTheme.colorScheme.primary
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Limpiar ($completedCount)",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.error
-                            )
+                        }
+                        if (completedCount > 0) {
+                            OutlinedButton(
+                                onClick = { viewModel.clearCheckedShoppingItems() },
+                                modifier = Modifier.height(34.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                            ) {
+                                Icon(
+                                    Icons.Outlined.DeleteSweep,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Limpiar ($completedCount)",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
                 }
@@ -309,7 +322,6 @@ fun ShoppingScreen(
                             Supermarket.MERCADONA -> ColorMercadona
                             Supermarket.CARREFOUR -> ColorCarrefour
                             Supermarket.LIDL -> ColorLidl
-                            Supermarket.ALCAMPO -> ColorAlcampo
                             Supermarket.OTRO -> ColorOtherSupermarket
                         }
                         SupermarketFilterChip(
@@ -821,12 +833,12 @@ fun ShoppingItemRow(
     onQtyChange: (Double) -> Unit,
     onDelete: () -> Unit
 ) {
-    val superColor = when (item.supermarket.lowercase()) {
-        "mercadona" -> if (isDark) Color(0xFF4ADE80) else ColorMercadona
-        "carrefour" -> if (isDark) Color(0xFF60A5FA) else ColorCarrefour
-        "lidl" -> if (isDark) Color(0xFF93C5FD) else ColorLidl
-        "alcampo" -> if (isDark) Color(0xFFFCA5A5) else ColorAlcampo
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    val normalizedSuper = Supermarket.fromString(item.supermarket)
+    val superColor = when (normalizedSuper) {
+        Supermarket.MERCADONA -> if (isDark) Color(0xFF4ADE80) else ColorMercadona
+        Supermarket.CARREFOUR -> if (isDark) Color(0xFF60A5FA) else ColorCarrefour
+        Supermarket.LIDL -> if (isDark) Color(0xFF93C5FD) else ColorLidl
+        Supermarket.OTRO -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val urgentFg = if (isDark) Color(0xFFFF8A80) else PriorityUrgente
     val urgentBg = if (isDark) PriorityUrgente.copy(alpha = 0.22f) else PriorityUrgenteBg
@@ -864,7 +876,7 @@ fun ShoppingItemRow(
                     color = superColor.copy(alpha = 0.14f)
                 ) {
                     Text(
-                        text = item.supermarket.uppercase(),
+                        text = normalizedSuper.displayName.uppercase(),
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = superColor,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -954,8 +966,13 @@ fun ShoppingItemRow(
 
             Spacer(modifier = Modifier.height(3.dp))
 
+            val ownerLabel = if (item.assignedMemberName.isNotBlank() && item.assignedMemberName != "Todos") {
+                "Para ${item.assignedMemberName} · Por ${item.addedByMemberName} · ${item.category}"
+            } else {
+                "${item.addedByMemberName} · ${item.category}"
+            }
             Text(
-                text = "${item.addedByMemberName} · ${item.category}",
+                text = ownerLabel,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

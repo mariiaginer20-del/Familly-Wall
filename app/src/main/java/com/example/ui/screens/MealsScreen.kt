@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.AddShoppingCart
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -68,13 +69,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.model.CategoryScope
 import com.example.data.model.MealPlan
 import com.example.data.model.MealType
 import com.example.data.model.Recipe
 import com.example.data.model.Supermarket
 import com.example.ui.FamilyWallViewModel
 import com.example.ui.dialogs.AddRecipeDialog
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Locale
+
+private data class PlannerDayInfo(
+    val index: Int,
+    val dayName: String,
+    val shortName: String,
+    val dateLabel: String,
+    val isToday: Boolean,
+    val weekIndex: Int
+)
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -86,15 +99,37 @@ fun MealsScreen(
 
     val mealPlans by viewModel.allMealPlans.collectAsStateWithLifecycle()
     val recipes by viewModel.allRecipes.collectAsStateWithLifecycle()
+    val allCategories by viewModel.allCategories.collectAsStateWithLifecycle()
 
-    val daysOfWeek = listOf("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
-    val todayMondayBased = remember {
-        val dow = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
-        if (dow == Calendar.SUNDAY) 6 else dow - 2
+    val plannerDays = remember {
+        val dayNames = listOf("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
+        val shortNames = listOf("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
+        val todayCal = Calendar.getInstance()
+        val dow = todayCal.get(Calendar.DAY_OF_WEEK)
+        val todayOffset = if (dow == Calendar.SUNDAY) 6 else dow - 2
+        val mondayCal = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, -todayOffset)
+        }
+        val sdf = SimpleDateFormat("d MMM", Locale("es", "ES"))
+        (0 until 14).map { idx ->
+            val cal = (mondayCal.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, idx) }
+            PlannerDayInfo(
+                index = idx,
+                dayName = dayNames[idx % 7],
+                shortName = shortNames[idx % 7],
+                dateLabel = sdf.format(cal.time),
+                isToday = idx == todayOffset,
+                weekIndex = idx / 7
+            )
+        }
+    }
+    val todayIndex = remember(plannerDays) {
+        plannerDays.firstOrNull { it.isToday }?.index ?: 0
     }
 
     var showFullWeekView by remember { mutableStateOf(true) }
-    var selectedDayIndex by remember { mutableIntStateOf(todayMondayBased) }
+    var weekFilter by remember { mutableIntStateOf(0) } // 0 = 2 semanas, 1 = Esta semana, 2 = Próx. semana
+    var selectedDayIndex by remember { mutableIntStateOf(todayIndex) }
 
     var editingSlot by remember { mutableStateOf<Pair<Int, MealType>?>(null) }
     var editingDishName by remember { mutableStateOf("") }
@@ -108,8 +143,17 @@ fun MealsScreen(
     var recipeToAssignToPlan by remember { mutableStateOf<Recipe?>(null) }
     var feedbackMessage by remember { mutableStateOf<String?>(null) }
 
-    val recipeCategories = remember(recipes) {
-        listOf("Todas", "Favoritas") + recipes.map { it.category }.distinct().sorted()
+    val customRecipeCategories = remember(allCategories) {
+        allCategories.filter { it.scope == CategoryScope.RECIPE.name }
+    }
+
+    val recipeCategories = remember(recipes, customRecipeCategories) {
+        val merged = (customRecipeCategories.map { it.name } + recipes.map { it.category })
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase() }
+            .sorted()
+        listOf("Todas", "Favoritas") + merged
     }
 
     val filteredRecipes = remember(recipes, recipeSearchQuery, selectedRecipeFilter) {
@@ -138,21 +182,39 @@ fun MealsScreen(
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            Column {
-                Text(
-                    text = "COCINA Y DESPENSA",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        letterSpacing = 1.2.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = if (selectedSubTab == 0) "Planning semanal" else "Recetario familiar",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (selectedSubTab == 0) "COMIDAS Y CENAS · 2 SEMANAS" else "COCINA Y DESPENSA",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            letterSpacing = 1.2.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (selectedSubTab == 0) "Planning quincenal" else "Recetario familiar",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+                if (selectedSubTab == 1) {
+                    IconButton(
+                        onClick = { viewModel.openManageCategories(CategoryScope.RECIPE) },
+                        modifier = Modifier.testTag("recipes_manage_categories_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Category,
+                            contentDescription = "Gestionar categorías de recetas",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
 
             if (feedbackMessage != null) {
@@ -254,7 +316,7 @@ fun MealsScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             if (selectedSubTab == 0) {
-                // PLANNING DE COMIDAS
+                // PLANNING DE COMIDAS (2 SEMANAS, COMIDA Y CENA)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -280,7 +342,7 @@ fun MealsScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Semana completa",
+                                text = "Vista completa",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (showFullWeekView) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                             )
@@ -316,52 +378,134 @@ fun MealsScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
-
                 if (showFullWeekView) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val scopeOptions = listOf(
+                            0 to "2 semanas (14 días)",
+                            1 to "Esta semana",
+                            2 to "Próxima semana"
+                        )
+                        items(scopeOptions) { (id, label) ->
+                            val picked = weekFilter == id
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = if (picked) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .clickable { weekFilter = id }
+                                    .testTag("planner_week_filter_$id")
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = if (picked) FontWeight.Bold else FontWeight.Medium
+                                    ),
+                                    color = if (picked) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val visibleDays = remember(plannerDays, weekFilter) {
+                        when (weekFilter) {
+                            1 -> plannerDays.filter { it.weekIndex == 0 }
+                            2 -> plannerDays.filter { it.weekIndex == 1 }
+                            else -> plannerDays
+                        }
+                    }
+
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(daysOfWeek.indices.toList()) { dayIdx ->
-                            val isToday = dayIdx == todayMondayBased
-                            val dayMeals = mealPlans.filter { it.dayOfWeekIndex == dayIdx }
-                            WeeklyDayCard(
-                                dayName = daysOfWeek[dayIdx],
-                                isToday = isToday,
-                                dayMeals = dayMeals,
-                                onSlotClick = { mType, currentDish, linkedId ->
-                                    editingSlot = dayIdx to mType
-                                    editingDishName = currentDish
-                                    editingLinkedRecipeId = linkedId
-                                }
-                            )
+                        val week1Days = visibleDays.filter { it.weekIndex == 0 }
+                        val week2Days = visibleDays.filter { it.weekIndex == 1 }
+
+                        if (week1Days.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "ESTA SEMANA",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        letterSpacing = 1.1.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            items(week1Days, key = { it.index }) { dayInfo ->
+                                val dayMeals = mealPlans.filter { it.dayOfWeekIndex == dayInfo.index }
+                                WeeklyDayCard(
+                                    dayName = "${dayInfo.dayName} · ${dayInfo.dateLabel}",
+                                    isToday = dayInfo.isToday,
+                                    dayMeals = dayMeals,
+                                    onSlotClick = { mType, currentDish, linkedId ->
+                                        editingSlot = dayInfo.index to mType
+                                        editingDishName = currentDish
+                                        editingLinkedRecipeId = linkedId
+                                    }
+                                )
+                            }
                         }
+
+                        if (week2Days.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "PRÓXIMA SEMANA",
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        letterSpacing = 1.1.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = MaterialTheme.colorScheme.secondary
+                                )
+                            }
+                            items(week2Days, key = { it.index }) { dayInfo ->
+                                val dayMeals = mealPlans.filter { it.dayOfWeekIndex == dayInfo.index }
+                                WeeklyDayCard(
+                                    dayName = "${dayInfo.dayName} · ${dayInfo.dateLabel}",
+                                    isToday = dayInfo.isToday,
+                                    dayMeals = dayMeals,
+                                    onSlotClick = { mType, currentDish, linkedId ->
+                                        editingSlot = dayInfo.index to mType
+                                        editingDishName = currentDish
+                                        editingLinkedRecipeId = linkedId
+                                    }
+                                )
+                            }
+                        }
+
                         item {
                             Spacer(modifier = Modifier.height(24.dp))
                         }
                     }
                 } else {
+                    Spacer(modifier = Modifier.height(12.dp))
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(daysOfWeek.indices.toList()) { index ->
-                            val isSelected = selectedDayIndex == index
-                            val isToday = index == todayMondayBased
+                        items(plannerDays, key = { it.index }) { dayInfo ->
+                            val isSelected = selectedDayIndex == dayInfo.index
                             Surface(
                                 shape = RoundedCornerShape(20.dp),
                                 color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
                                 border = if (isSelected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(20.dp))
-                                    .clickable { selectedDayIndex = index }
-                                    .testTag("planner_day_$index")
+                                    .clickable { selectedDayIndex = dayInfo.index }
+                                    .testTag("planner_day_${dayInfo.index}")
                             ) {
                                 Text(
-                                    text = if (isToday) "${daysOfWeek[index]} · Hoy" else daysOfWeek[index],
+                                    text = if (dayInfo.isToday) "${dayInfo.shortName} ${dayInfo.dateLabel} · Hoy" else "${dayInfo.shortName} ${dayInfo.dateLabel}",
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                     ),
@@ -374,7 +518,8 @@ fun MealsScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    val dayMeals = mealPlans.filter { it.dayOfWeekIndex == selectedDayIndex }
+                    val selectedDayInfo = plannerDays.getOrNull(selectedDayIndex) ?: plannerDays.first()
+                    val dayMeals = mealPlans.filter { it.dayOfWeekIndex == selectedDayInfo.index }
 
                     LazyColumn(
                         modifier = Modifier
@@ -384,13 +529,13 @@ fun MealsScreen(
                     ) {
                         item {
                             Text(
-                                text = "Menú del ${daysOfWeek[selectedDayIndex]}",
+                                text = "Menú del ${selectedDayInfo.dayName}, ${selectedDayInfo.dateLabel}",
                                 style = MaterialTheme.typography.titleLarge,
                                 color = MaterialTheme.colorScheme.onBackground
                             )
                         }
 
-                        items(MealType.entries) { mType ->
+                        items(MealType.plannerTypes) { mType ->
                             val existingPlan = dayMeals.firstOrNull { it.mealType == mType.name }
                             val dish = existingPlan?.dishName ?: "Sin planificar"
                             val linkedRecipe = existingPlan?.recipeId?.let { rid ->
@@ -402,7 +547,7 @@ fun MealsScreen(
                                 dishName = dish,
                                 hasLinkedRecipe = linkedRecipe != null,
                                 onEdit = {
-                                    editingSlot = selectedDayIndex to mType
+                                    editingSlot = selectedDayInfo.index to mType
                                     editingDishName = if (dish != "Sin planificar") dish else ""
                                     editingLinkedRecipeId = existingPlan?.recipeId
                                 },
@@ -550,10 +695,12 @@ fun MealsScreen(
     // Dialog: Edit / Assign Meal Slot
     if (editingSlot != null) {
         val (dayIdx, mType) = editingSlot!!
+        val dayInfo = plannerDays.getOrNull(dayIdx)
+        val dayTitle = if (dayInfo != null) "${dayInfo.dayName} (${dayInfo.dateLabel})" else "Día ${dayIdx + 1}"
         AlertDialog(
             onDismissRequest = { editingSlot = null },
             title = {
-                Text("${mType.displayName} · ${daysOfWeek[dayIdx]}", style = MaterialTheme.typography.titleLarge)
+                Text("${mType.displayName} · $dayTitle", style = MaterialTheme.typography.titleLarge)
             },
             text = {
                 Column(
@@ -568,7 +715,7 @@ fun MealsScreen(
                             editingLinkedRecipeId = null
                         },
                         label = { Text("Plato o menú") },
-                        placeholder = { Text("ej: Tostadas, Lentejas, Salmón...") },
+                        placeholder = { Text("ej: Lentejas, Salmón al horno...") },
                         singleLine = true,
                         trailingIcon = {
                             if (editingDishName.isNotBlank()) {
@@ -626,9 +773,9 @@ fun MealsScreen(
                     onClick = {
                         viewModel.updateMealPlanSlot(dayIdx, mType, editingDishName, editingLinkedRecipeId)
                         feedbackMessage = if (editingDishName.isBlank()) {
-                            "${mType.displayName} (${daysOfWeek[dayIdx]}) vaciado"
+                            "${mType.displayName} ($dayTitle) vaciado"
                         } else {
-                            "${mType.displayName} del ${daysOfWeek[dayIdx]}: $editingDishName"
+                            "${mType.displayName} del $dayTitle: $editingDishName"
                         }
                         editingSlot = null
                     },
@@ -649,7 +796,7 @@ fun MealsScreen(
     if (selectedRecipeForDetails != null) {
         val r = selectedRecipeForDetails!!
         val ingredientLines = remember(r.id, r.ingredients) {
-            r.ingredients.split("\n", ",").map { it.trim() }.filter { it.isNotBlank() }
+            r.ingredients.split("\n").map { it.trim() }.filter { it.isNotBlank() }
         }
         val selectedIngredients = remember(r.id, r.ingredients) {
             mutableStateListOf<Boolean>().apply {
@@ -820,7 +967,9 @@ fun MealsScreen(
     if (recipeToEdit != null) {
         val editing = recipeToEdit!!
         AddRecipeDialog(
+            categories = customRecipeCategories,
             initialRecipe = editing,
+            onManageCategories = { viewModel.openManageCategories(CategoryScope.RECIPE) },
             onDismiss = { recipeToEdit = null },
             onSave = { draft ->
                 viewModel.updateRecipe(
@@ -842,31 +991,58 @@ fun MealsScreen(
 
     if (recipeToAssignToPlan != null) {
         val r = recipeToAssignToPlan!!
-        var targetDayIdx by remember { mutableIntStateOf(todayMondayBased) }
+        var selectedWeek by remember { mutableIntStateOf(todayIndex / 7) }
+        var targetDayInWeek by remember { mutableIntStateOf(todayIndex % 7) }
         var targetMealType by remember { mutableStateOf(MealType.COMIDA) }
+        val targetDayIdx = selectedWeek * 7 + targetDayInWeek
+        val weekDays = plannerDays.filter { it.weekIndex == selectedWeek }
 
         AlertDialog(
             onDismissRequest = { recipeToAssignToPlan = null },
             title = { Text("Asignar '${r.title}'", style = MaterialTheme.typography.titleLarge) },
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text("Día de la semana", style = MaterialTheme.typography.labelMedium)
+                    Text("Semana", style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.height(6.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        daysOfWeek.forEachIndexed { idx, name ->
-                            val isSelected = targetDayIdx == idx
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(0 to "Esta semana", 1 to "Próxima semana").forEach { (wIdx, label) ->
+                            val isSelected = selectedWeek == wIdx
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .clickable { targetDayIdx = idx }
+                                    .clickable { selectedWeek = wIdx }
                             ) {
                                 Text(
-                                    text = name,
+                                    text = label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("Día", style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        weekDays.forEach { dayInfo ->
+                            val dayInWeek = dayInfo.index % 7
+                            val isSelected = targetDayInWeek == dayInWeek
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { targetDayInWeek = dayInWeek }
+                            ) {
+                                Text(
+                                    text = "${dayInfo.shortName} ${dayInfo.dateLabel}",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
@@ -876,13 +1052,13 @@ fun MealsScreen(
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("Comida", style = MaterialTheme.typography.labelMedium)
+                    Text("Turno", style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.height(6.dp))
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        MealType.entries.forEach { mType ->
+                        MealType.plannerTypes.forEach { mType ->
                             val isSelected = targetMealType == mType
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
@@ -903,10 +1079,12 @@ fun MealsScreen(
                 }
             },
             confirmButton = {
+                val chosenDay = plannerDays.getOrNull(targetDayIdx)
+                val dayDesc = if (chosenDay != null) "${chosenDay.dayName} ${chosenDay.dateLabel}" else "día"
                 Button(
                     onClick = {
                         viewModel.updateMealPlanSlot(targetDayIdx, targetMealType, r.title, r.id)
-                        feedbackMessage = "'${r.title}' añadido al ${daysOfWeek[targetDayIdx]} (${targetMealType.displayName})"
+                        feedbackMessage = "'${r.title}' añadido al $dayDesc (${targetMealType.displayName})"
                         recipeToAssignToPlan = null
                     }
                 ) {
@@ -1029,9 +1207,10 @@ fun WeeklyDayCard(
                     }
                 }
 
-                val plannedCount = dayMeals.count { it.dishName.isNotBlank() }
+                val plannerTypeNames = MealType.plannerTypes.map { it.name }
+                val plannedCount = dayMeals.count { it.dishName.isNotBlank() && it.mealType in plannerTypeNames }
                 Text(
-                    text = "$plannedCount / ${MealType.entries.size}",
+                    text = "$plannedCount / ${MealType.plannerTypes.size}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1040,7 +1219,7 @@ fun WeeklyDayCard(
             Spacer(modifier = Modifier.height(10.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
 
-            MealType.entries.forEachIndexed { idx, mType ->
+            MealType.plannerTypes.forEachIndexed { idx, mType ->
                 val slot = dayMeals.firstOrNull { it.mealType == mType.name }
                 val dish = slot?.dishName?.takeIf { it.isNotBlank() }
                 Row(
@@ -1074,7 +1253,7 @@ fun WeeklyDayCard(
                         modifier = Modifier.size(15.dp)
                     )
                 }
-                if (idx < MealType.entries.lastIndex) {
+                if (idx < MealType.plannerTypes.lastIndex) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
                 }
             }
@@ -1160,7 +1339,7 @@ fun RecipeCard(
     onAddToShopping: () -> Unit
 ) {
     val ingredientCount = remember(recipe.ingredients) {
-        recipe.ingredients.split("\n", ",").map { it.trim() }.count { it.isNotBlank() }
+        recipe.ingredients.split("\n").map { it.trim() }.count { it.isNotBlank() }
     }
 
     Surface(
