@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.CategoryScope
+import com.example.data.model.EventReminderOptions
 import com.example.data.model.FamilyTask
 import com.example.data.preferences.AppDesignStyle
 import com.example.ui.FamilyWallViewModel
@@ -379,11 +381,40 @@ fun FamilyTaskRow(
                     )
                 }
 
+                val dueLabel = if (task.dueEpochMillis > 0L && task.reminderMinutesList.isNotEmpty()) {
+                    "${task.dueDate} (${task.dueTime})"
+                } else {
+                    task.dueDate
+                }
                 Text(
-                    text = "${task.assignedMemberEmoji} ${task.assignedMemberName} · ${task.dueDate} · ${task.category}",
+                    text = "${task.assignedMemberEmoji} ${task.assignedMemberName} · $dueLabel · ${task.category}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            if (task.dueEpochMillis > 0L && task.reminderMinutesList.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.NotificationsActive,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(13.dp)
+                    )
+                    val remindersText = task.reminderMinutesList
+                        .distinct()
+                        .sortedDescending()
+                        .joinToString(", ") { EventReminderOptions.formatShort(it) }
+                    Text(
+                        text = "Avisos: $remindersText",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
 

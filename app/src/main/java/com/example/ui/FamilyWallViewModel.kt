@@ -23,6 +23,7 @@ import com.example.data.model.ShoppingItem
 import com.example.data.model.Supermarket
 import com.example.data.model.TaskPriority
 import com.example.data.model.UserProfile
+import com.example.data.model.resolvedReminders
 import com.example.data.preferences.AppDesignStyle
 import com.example.data.preferences.AppearanceSettings
 import com.example.data.preferences.ThemeDarkMode
@@ -104,6 +105,9 @@ data class TaskDraft(
     val assignedMemberName: String = "Cualquiera",
     val assignedMemberEmoji: String = "⭐",
     val dueDate: String = "Hoy",
+    val dueEpochMillis: Long = 0L,
+    val dueTime: String = "09:00",
+    val reminderMinutesList: List<Int> = emptyList(),
     val priority: TaskPriority = TaskPriority.MEDIA,
     val category: String = "Hogar"
 )
@@ -218,6 +222,8 @@ class FamilyWallViewModel(
     private var lastSyncedSignature: String? = null
     private var lastCategorySeededFamilyId: String? = null
     private var lastMacroSeededFamilyId: String? = null
+    private var lastScheduledEventSignatures: Map<String, String> = emptyMap()
+    private var lastScheduledTaskSignatures: Map<String, String> = emptyMap()
 
     init {
         viewModelScope.launch {
@@ -244,6 +250,84 @@ class FamilyWallViewModel(
                         onlyIfCompletelyEmpty = true
                     )
                 }
+            }
+        }
+
+        // Schedule local reminders on every assigned member's device when Firestore syncs events
+        viewModelScope.launch {
+            combine(allEvents, userProfileState, allMembers) { events, profileState, members ->
+                Triple(events, (profileState as? UiState.Success)?.data, members)
+            }.collect { (events, profile, members) ->
+                val myName = members.firstOrNull { it.linkedUid == currentUserId }?.name
+                    ?.takeIf { it.isNotBlank() }
+                    ?: profile?.displayName?.takeIf { it.isNotBlank() }
+
+                val nextSignatures = mutableMapOf<String, String>()
+                events.forEach { ev ->
+                    val isAssignedToMe =
+                        ev.assignedMemberName.equals("Todos", ignoreCase = true) ||
+                        ev.assignedMemberName.equals("Cualquiera", ignoreCase = true) ||
+                        (myName != null && ev.assignedMemberName.equals(myName, ignoreCase = true))
+
+                    if (isAssignedToMe && ev.id.isNotBlank()) {
+                        val remindersSig = ev.resolvedReminders().sorted().joinToString(",")
+                        val sig = "${ev.title}|${ev.dateEpochMillis}|${ev.allDay}|${ev.startTime}|${ev.endTime}|${ev.assignedMemberName}|$remindersSig"
+                        nextSignatures[ev.id] = sig
+                        if (lastScheduledEventSignatures[ev.id] != sig) {
+                            notificationManager.scheduleEventReminders(ev)
+                        }
+                    }
+                }
+
+                lastScheduledEventSignatures.keys
+                    .filter { it !in nextSignatures }
+                    .forEach { removedId ->
+                        notificationManager.cancelEventReminders(removedId)
+                    }
+
+                lastScheduledEventSignatures = nextSignatures
+            }
+        }
+
+        // Schedule local reminders on every assigned member's device when Firestore syncs tasks
+        viewModelScope.launch {
+            combine(allTasks, userProfileState, allMembers) { tasks, profileState, members ->
+                Triple(tasks, (profileState as? UiState.Success)?.data, members)
+            }.collect { (tasks, profile, members) ->
+                val myName = members.firstOrNull { it.linkedUid == currentUserId }?.name
+                    ?.takeIf { it.isNotBlank() }
+                    ?: profile?.displayName?.takeIf { it.isNotBlank() }
+
+                val nextTaskSignatures = mutableMapOf<String, String>()
+                tasks.forEach { task ->
+                    val isAssignedToMe =
+                        task.assignedMemberName.equals("Todos", ignoreCase = true) ||
+                        task.assignedMemberName.equals("Cualquiera", ignoreCase = true) ||
+                        (myName != null && task.assignedMemberName.equals(myName, ignoreCase = true))
+
+                    if (
+                        isAssignedToMe &&
+                        !task.completed &&
+                        task.id.isNotBlank() &&
+                        task.dueEpochMillis > 0L &&
+                        task.reminderMinutesList.isNotEmpty()
+                    ) {
+                        val remindersSig = task.reminderMinutesList.distinct().sorted().joinToString(",")
+                        val sig = "${task.title}|${task.dueDate}|${task.dueEpochMillis}|${task.dueTime}|${task.assignedMemberName}|$remindersSig"
+                        nextTaskSignatures[task.id] = sig
+                        if (lastScheduledTaskSignatures[task.id] != sig) {
+                            notificationManager.scheduleTaskReminders(task)
+                        }
+                    }
+                }
+
+                lastScheduledTaskSignatures.keys
+                    .filter { it !in nextTaskSignatures }
+                    .forEach { removedId ->
+                        notificationManager.cancelTaskReminders(removedId)
+                    }
+
+                lastScheduledTaskSignatures = nextTaskSignatures
             }
         }
     }
@@ -731,9 +815,7 @@ class FamilyWallViewModel(
                     notified = false
                 )
                 repository.addEvent(fam.id, fam.memberUids, entity)
-                    .onSuccess { created ->
-                        notificationManager.scheduleEventReminders(created)
-                        notificationManager.showEventNotification(created)
+                    .onSuccess {
                         emitMessage("Evento '${draft.title.trim()}' guardado")
                     }
                     .onFailure { emitMessage("No se pudo guardar el evento") }
@@ -755,8 +837,7 @@ class FamilyWallViewModel(
                     reminderMinutesList = reminders
                 )
                 repository.updateEvent(fam.id, updated)
-                    .onSuccess { saved ->
-                        notificationManager.scheduleEventReminders(saved)
+                    .onSuccess {
                         emitMessage("Evento actualizado")
                     }
                     .onFailure { emitMessage("No se pudo actualizar el evento") }
@@ -782,6 +863,7 @@ class FamilyWallViewModel(
     fun saveTask(draft: TaskDraft, editing: FamilyTask?) {
         val fam = currentFamily() ?: return
         viewModelScope.launch {
+            val reminders = if (draft.dueEpochMillis > 0L) draft.reminderMinutesList.distinct() else emptyList()
             if (editing == null) {
                 val task = FamilyTask(
                     familyId = fam.id,
@@ -790,6 +872,9 @@ class FamilyWallViewModel(
                     assignedMemberName = draft.assignedMemberName,
                     assignedMemberEmoji = draft.assignedMemberEmoji,
                     dueDate = draft.dueDate,
+                    dueEpochMillis = draft.dueEpochMillis.coerceAtLeast(0L),
+                    dueTime = draft.dueTime.ifBlank { "09:00" },
+                    reminderMinutesList = reminders,
                     priority = draft.priority.name,
                     completed = false,
                     category = draft.category
@@ -804,6 +889,9 @@ class FamilyWallViewModel(
                     assignedMemberName = draft.assignedMemberName,
                     assignedMemberEmoji = draft.assignedMemberEmoji,
                     dueDate = draft.dueDate,
+                    dueEpochMillis = draft.dueEpochMillis.coerceAtLeast(0L),
+                    dueTime = draft.dueTime.ifBlank { "09:00" },
+                    reminderMinutesList = reminders,
                     priority = draft.priority.name,
                     category = draft.category
                 )
@@ -825,6 +913,7 @@ class FamilyWallViewModel(
     fun deleteTask(task: FamilyTask) {
         val fam = currentFamily() ?: return
         viewModelScope.launch {
+            notificationManager.cancelTaskReminders(task.id)
             repository.deleteTask(fam.id, task.id)
                 .onFailure { emitMessage("No se pudo eliminar la tarea") }
         }
@@ -995,21 +1084,6 @@ class FamilyWallViewModel(
             repository.deleteMacroIngredient(fam.id, ingredient.id)
                 .onSuccess { emitMessage("Ingrediente eliminado") }
                 .onFailure { emitMessage("No se pudo eliminar el ingrediente") }
-        }
-    }
-
-    fun restoreDefaultMacroIngredients() {
-        val fam = currentFamily() ?: return
-        viewModelScope.launch {
-            repository.seedDefaultMacroIngredientsIfNeeded(
-                familyId = fam.id,
-                memberUids = fam.memberUids,
-                onlyIfCompletelyEmpty = false
-            ).onSuccess {
-                emitMessage("Ingredientes base restaurados")
-            }.onFailure {
-                emitMessage("No se pudieron restaurar los ingredientes")
-            }
         }
     }
 }

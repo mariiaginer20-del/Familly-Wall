@@ -295,15 +295,16 @@ private fun MacroTargetGroupEditor(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MacroIngredientEditorDialog(
     initialIngredient: MacroIngredient? = null,
+    initialName: String = "",
     onDismiss: () -> Unit,
     onSave: (name: String, emoji: String, carbs: Double, protein: Double, fat: Double) -> Unit
 ) {
-    var name by remember(initialIngredient) { mutableStateOf(initialIngredient?.name ?: "") }
-    var emoji by remember(initialIngredient) { mutableStateOf(initialIngredient?.emoji ?: "🥗") }
+    var name by remember(initialIngredient, initialName) {
+        mutableStateOf(initialIngredient?.name ?: initialName)
+    }
     var carbs by remember(initialIngredient) {
         mutableStateOf(if (initialIngredient != null) formatMacroInput(initialIngredient.carbsPer100g) else "0")
     }
@@ -314,11 +315,7 @@ fun MacroIngredientEditorDialog(
         mutableStateOf(if (initialIngredient != null) formatMacroInput(initialIngredient.fatPer100g) else "0")
     }
 
-    val emojiOptions = listOf(
-        "🍗", "🥩", "🐟", "🍣", "🥚", "🥛", "🧀", "🍚", "🥔", "🍝",
-        "🥣", "🍞", "🍌", "🥑", "🫒", "🥜", "🍲", "🥗", "🍎", "🫘"
-    )
-
+    val preservedEmoji = initialIngredient?.emoji?.takeIf { it.isNotBlank() } ?: "•"
     val cVal = parseMacroInput(carbs, 100.0)
     val pVal = parseMacroInput(protein, 100.0)
     val fVal = parseMacroInput(fat, 100.0)
@@ -356,32 +353,6 @@ fun MacroIngredientEditorDialog(
                         .fillMaxWidth()
                         .testTag("macro_ingredient_name_input")
                 )
-
-                Text(
-                    text = "Icono",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    emojiOptions.forEach { em ->
-                        val picked = emoji == em
-                        Surface(
-                            shape = CircleShape,
-                            color = if (picked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .clickable { emoji = em }
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(em, fontSize = 16.sp)
-                            }
-                        }
-                    }
-                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -441,7 +412,7 @@ fun MacroIngredientEditorDialog(
             Button(
                 onClick = {
                     if (name.isNotBlank()) {
-                        onSave(name.trim(), emoji, cVal, pVal, fVal)
+                        onSave(name.trim(), preservedEmoji, cVal, pVal, fVal)
                     }
                 },
                 enabled = name.isNotBlank(),

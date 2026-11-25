@@ -149,6 +149,9 @@ service cloud.firestore {
              data.assignedMemberName is string && data.assignedMemberName.size() >= 1 && data.assignedMemberName.size() <= 40 &&
              data.assignedMemberEmoji is string && data.assignedMemberEmoji.size() >= 1 && data.assignedMemberEmoji.size() <= 16 &&
              data.dueDate is string && data.dueDate.size() >= 1 && data.dueDate.size() <= 40 &&
+             (!('dueEpochMillis' in data) || (data.dueEpochMillis is int && data.dueEpochMillis >= 0)) &&
+             (!('dueTime' in data) || (data.dueTime is string && data.dueTime.size() <= 10)) &&
+             (!('reminderMinutesList' in data) || (data.reminderMinutesList is list && data.reminderMinutesList.size() <= 10)) &&
              data.priority in ['ALTA', 'MEDIA', 'BAJA'] &&
              data.completed is bool &&
              data.category is string && data.category.size() >= 1 && data.category.size() <= 40 &&
@@ -511,7 +514,7 @@ service cloud.firestore {
         allow create: if isSignedIn() &&
                          isValidId(taskId) &&
                          incoming().keys().hasAll(['familyId', 'title', 'description', 'assignedMemberName', 'assignedMemberEmoji', 'dueDate', 'priority', 'completed', 'category', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
-                         incoming().keys().hasOnly(['familyId', 'title', 'description', 'assignedMemberName', 'assignedMemberEmoji', 'dueDate', 'priority', 'completed', 'category', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'title', 'description', 'assignedMemberName', 'assignedMemberEmoji', 'dueDate', 'dueEpochMillis', 'dueTime', 'reminderMinutesList', 'priority', 'completed', 'category', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
                          incoming().familyId == familyId &&
                          incoming().createdByUid == request.auth.uid &&
                          request.auth.uid in incoming().memberUids &&
@@ -530,7 +533,7 @@ service cloud.firestore {
                          isFamilyMemberDoc(familyId) && (
                            (incoming().diff(existing()).affectedKeys().hasOnly(['completed', 'updatedAt'])) ||
                            (incoming().memberUids == existing().memberUids &&
-                            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'assignedMemberName', 'assignedMemberEmoji', 'dueDate', 'priority', 'completed', 'category', 'updatedAt'])) ||
+                            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'assignedMemberName', 'assignedMemberEmoji', 'dueDate', 'dueEpochMillis', 'dueTime', 'reminderMinutesList', 'priority', 'completed', 'category', 'updatedAt'])) ||
                            (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
                             incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
                          );

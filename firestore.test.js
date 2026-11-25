@@ -296,16 +296,19 @@ test("Shopping items, tasks, custom lists, calendar events, meal plans, recipes 
   // Reject ghost field
   await assertFails(shopRef.update({ ghost: true, updatedAt: past() }));
 
-  // 2. Task create & edit & checkbox toggle
+  // 2. Task create (with reminders) & edit & checkbox toggle
   const taskRef = aliceDb.collection("families").doc("fam_1").collection("tasks").doc("task_1");
   await assertSucceeds(
     taskRef.set({
       familyId: "fam_1",
       title: "Sacar basura",
       description: "Orgánica",
-      assignedMemberName: "Alice",
-      assignedMemberEmoji: "👩",
+      assignedMemberName: "Todos",
+      assignedMemberEmoji: "👨‍👩‍👧‍👦",
       dueDate: "Hoy",
+      dueEpochMillis: Date.now(),
+      dueTime: "20:30",
+      reminderMinutesList: [60, 15, 0],
       priority: "ALTA",
       completed: false,
       category: "Hogar",
@@ -316,7 +319,8 @@ test("Shopping items, tasks, custom lists, calendar events, meal plans, recipes 
     })
   );
   await assertSucceeds(taskRef.update({ completed: true, updatedAt: past() }));
-  await assertSucceeds(taskRef.update({ title: "Sacar basura y reciclaje", updatedAt: past() }));
+  await assertSucceeds(taskRef.update({ title: "Sacar basura y reciclaje", reminderMinutesList: [1440, 60], updatedAt: past() }));
+  await assertFails(taskRef.update({ dueEpochMillis: -1, updatedAt: past() }));
 
   // 3. CustomList & CustomListItem
   const listRef = aliceDb.collection("families").doc("fam_1").collection("customLists").doc("list_1");

@@ -149,7 +149,7 @@
     },
     "FamilyTask": {
       "title": "FamilyTask",
-      "description": "Shared household task assigned to a family member.",
+      "description": "Shared household task assigned to a family member with optional scheduled reminders.",
       "type": "object",
       "properties": {
         "familyId": { "type": "string" },
@@ -158,6 +158,9 @@
         "assignedMemberName": { "type": "string" },
         "assignedMemberEmoji": { "type": "string" },
         "dueDate": { "type": "string" },
+        "dueEpochMillis": { "type": "integer" },
+        "dueTime": { "type": "string" },
+        "reminderMinutesList": { "type": "array", "items": { "type": "integer" } },
         "priority": { "type": "string", "enum": ["ALTA", "MEDIA", "BAJA"] },
         "completed": { "type": "boolean" },
         "category": { "type": "string" },

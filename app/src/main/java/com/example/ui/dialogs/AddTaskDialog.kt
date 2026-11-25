@@ -19,7 +19,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
@@ -27,13 +29,17 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.CategoryScope
 import com.example.data.model.DefaultCategories
+import com.example.data.model.EventReminderOptions
 import com.example.data.model.FamilyCategory
 import com.example.data.model.FamilyMember
 import com.example.data.model.FamilyTask
@@ -55,8 +62,43 @@ import com.example.data.model.TaskPriority
 import com.example.ui.TaskDraft
 import com.example.ui.theme.PriorityUrgente
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+
+private fun resolveDueEpochMillis(option: String): Long {
+    val cal = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 12)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return when (option) {
+        "Hoy" -> cal.timeInMillis
+        "Mañana" -> {
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+            cal.timeInMillis
+        }
+        "Esta semana" -> {
+            val dow = cal.get(Calendar.DAY_OF_WEEK)
+            val daysToFriday = when (dow) {
+                Calendar.SATURDAY -> 6
+                Calendar.SUNDAY -> 5
+                else -> (Calendar.FRIDAY - dow).coerceAtLeast(1)
+            }
+            cal.add(Calendar.DAY_OF_YEAR, daysToFriday)
+            cal.timeInMillis
+        }
+        "Fin de semana" -> {
+            val dow = cal.get(Calendar.DAY_OF_WEEK)
+            val daysToSat = (Calendar.SATURDAY - dow + 7) % 7
+            cal.add(Calendar.DAY_OF_YEAR, daysToSat)
+            cal.timeInMillis
+        }
+        "Sin fecha" -> 0L
+        else -> cal.timeInMillis
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -75,12 +117,25 @@ fun AddTaskDialog(
     var title by remember(initialTask) { mutableStateOf(initialTask?.title ?: "") }
     var description by remember(initialTask) { mutableStateOf(initialTask?.description ?: "") }
     var assignedMemberName by remember(initialTask) {
-        mutableStateOf(initialTask?.assignedMemberName ?: members.firstOrNull()?.name ?: "Cualquiera")
+        mutableStateOf(initialTask?.assignedMemberName ?: members.firstOrNull()?.name ?: "Todos")
     }
     var assignedEmoji by remember(initialTask) {
-        mutableStateOf(initialTask?.assignedMemberEmoji ?: members.firstOrNull()?.avatarEmoji ?: "⭐")
+        mutableStateOf(initialTask?.assignedMemberEmoji ?: members.firstOrNull()?.avatarEmoji ?: "👨‍👩‍👧‍👦")
     }
     var dueDate by remember(initialTask) { mutableStateOf(initialTask?.dueDate ?: "Sin fecha") }
+    var dueEpochMillis by remember(initialTask) {
+        val initialMillis = initialTask?.dueEpochMillis ?: 0L
+        val resolved = if (initialMillis > 0L) initialMillis
+        else if (initialTask != null && initialTask.dueDate != "Sin fecha") resolveDueEpochMillis(initialTask.dueDate)
+        else 0L
+        mutableLongStateOf(resolved)
+    }
+    var dueTime by remember(initialTask) {
+        mutableStateOf(initialTask?.dueTime?.ifBlank { "09:00" } ?: "09:00")
+    }
+    var selectedReminders by remember(initialTask) {
+        mutableStateOf(initialTask?.reminderMinutesList ?: emptyList())
+    }
     var priority by remember(initialTask) {
         mutableStateOf(initialTask?.let { TaskPriority.fromString(it.priority) } ?: TaskPriority.MEDIA)
     }
@@ -92,6 +147,7 @@ fun AddTaskDialog(
         )
     }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
 
     val dueOptions = listOf("Hoy", "Mañana", "Esta semana", "Fin de semana", "Sin fecha")
 
@@ -139,8 +195,10 @@ fun AddTaskDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    val allOptions = listOf(Triple("Cualquiera", "⭐", "Cualquiera")) +
-                        members.map { Triple(it.name, it.avatarEmoji, it.name) }
+                    val allOptions = listOf(
+                        Triple("Todos", "👨‍👩‍👧‍👦", "Todos"),
+                        Triple("Cualquiera", "⭐", "Cualquiera")
+                    ) + members.map { Triple(it.name, it.avatarEmoji, it.name) }
                     allOptions.forEach { (name, emoji, tag) ->
                         val isSelected = assignedMemberName == name
                         Surface(
@@ -184,7 +242,13 @@ fun AddTaskDialog(
                             color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { dueDate = option }
+                                .clickable {
+                                    dueDate = option
+                                    dueEpochMillis = resolveDueEpochMillis(option)
+                                    if (option == "Sin fecha") {
+                                        selectedReminders = emptyList()
+                                    }
+                                }
                                 .testTag("task_due_${option.lowercase().replace(" ", "_")}")
                         ) {
                             Text(
@@ -220,6 +284,75 @@ fun AddTaskDialog(
                             )
                         }
                     }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (dueEpochMillis > 0L && dueDate != "Sin fecha") {
+                    OutlinedButton(
+                        onClick = { showTimePicker = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("task_due_time_picker")
+                    ) {
+                        Icon(Icons.Outlined.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Hora límite / aviso: $dueTime", style = MaterialTheme.typography.labelLarge)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.NotificationsActive,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Notificaciones previas (puedes elegir varias)",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        EventReminderOptions.options.forEach { (mins, label) ->
+                            val isSelected = mins in selectedReminders
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        selectedReminders = if (isSelected) {
+                                            selectedReminders - mins
+                                        } else {
+                                            selectedReminders + mins
+                                        }
+                                    }
+                                    .testTag("task_reminder_chip_$mins")
+                            ) {
+                                Text(
+                                    text = if (isSelected) "✓ $label" else label,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Text(
+                        text = "Elige una fecha límite arriba si quieres programar avisos previos.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -349,6 +482,9 @@ fun AddTaskDialog(
                                 assignedMemberName = assignedMemberName,
                                 assignedMemberEmoji = assignedEmoji,
                                 dueDate = dueDate,
+                                dueEpochMillis = if (dueDate == "Sin fecha") 0L else dueEpochMillis,
+                                dueTime = dueTime,
+                                reminderMinutesList = if (dueDate == "Sin fecha") emptyList() else selectedReminders.distinct(),
                                 priority = priority,
                                 category = category
                             )
@@ -369,13 +505,16 @@ fun AddTaskDialog(
     )
 
     if (showDatePicker) {
-        val state = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis())
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = if (dueEpochMillis > 0L) dueEpochMillis else System.currentTimeMillis()
+        )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(
                     onClick = {
                         state.selectedDateMillis?.let { millis ->
+                            dueEpochMillis = millis
                             dueDate = SimpleDateFormat("d MMM", Locale("es", "ES"))
                                 .format(Date(millis))
                         }
@@ -389,5 +528,37 @@ fun AddTaskDialog(
         ) {
             DatePicker(state = state)
         }
+    }
+
+    if (showTimePicker) {
+        val parts = dueTime.split(":")
+        val initHour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 9
+        val initMin = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
+        val timeState = rememberTimePickerState(
+            initialHour = initHour,
+            initialMinute = initMin,
+            is24Hour = true
+        )
+        AlertDialog(
+            onDismissRequest = { showTimePicker = false },
+            title = {
+                Text(
+                    text = "Hora límite / aviso",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                )
+            },
+            text = { TimePicker(state = timeState) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        dueTime = String.format(Locale.US, "%02d:%02d", timeState.hour, timeState.minute)
+                        showTimePicker = false
+                    }
+                ) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showTimePicker = false }) { Text("Cancelar") }
+            }
+        )
     }
 }

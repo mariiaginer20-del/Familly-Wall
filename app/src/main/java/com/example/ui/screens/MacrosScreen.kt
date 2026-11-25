@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.outlined.BookmarkAdd
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Button
@@ -65,6 +64,7 @@ import com.example.data.model.MacroDominance
 import com.example.data.model.MacroIngredient
 import com.example.data.model.MacroMealSlot
 import com.example.data.model.MacroSolver
+import com.example.data.model.MacroTriple
 import com.example.data.model.RecipeFormatters
 import com.example.data.model.RecipeIngredient
 import com.example.data.model.dailyTriple
@@ -74,6 +74,22 @@ import com.example.ui.RecipeDraft
 import com.example.ui.dialogs.MacroIngredientEditorDialog
 import com.example.ui.dialogs.MacroTargetsDialog
 import kotlin.math.roundToInt
+
+private val CarbColor = Color(0xFFD97706)
+private val ProteinColor = Color(0xFF157A4B)
+private val FatColor = Color(0xFF2847D6)
+
+private fun macroColor(macro: MacroDominance): Color = when (macro) {
+    MacroDominance.CARB -> CarbColor
+    MacroDominance.PROTEIN -> ProteinColor
+    MacroDominance.FAT -> FatColor
+}
+
+private fun macroShortLabel(macro: MacroDominance): String = when (macro) {
+    MacroDominance.CARB -> "HC"
+    MacroDominance.PROTEIN -> "P"
+    MacroDominance.FAT -> "G"
+}
 
 private fun formatGramsShort(v: Double): String {
     return if (v % 1.0 == 0.0 || kotlin.math.abs(v - v.roundToInt()) < 0.05) {
@@ -92,14 +108,18 @@ fun MacrosScreen(
     val macroTargets by viewModel.macroTargets.collectAsStateWithLifecycle()
     val allIngredients by viewModel.macroIngredients.collectAsStateWithLifecycle()
 
-    var selectedSubTab by remember { mutableIntStateOf(0) } // 0 = Calculadora, 1 = Alimentos
+    var selectedSubTab by remember { mutableIntStateOf(0) } // 0 = Calcular comida, 1 = Alimentos
     var selectedMealSlot by remember { mutableStateOf(MacroMealSlot.COMIDA) }
     val selectedIngredientIds = remember { mutableStateListOf<String>() }
-    var searchQuery by remember { mutableStateOf("") }
+
+    var calcSearchQuery by remember { mutableStateOf("") }
+    var librarySearchQuery by remember { mutableStateOf("") }
+    val selectedMacroFilters = remember { mutableStateListOf<MacroDominance>() }
 
     var showTargetsDialog by remember { mutableStateOf(false) }
     var showIngredientDialog by remember { mutableStateOf(false) }
     var editingIngredient by remember { mutableStateOf<MacroIngredient?>(null) }
+    var newIngredientPrefillName by remember { mutableStateOf("") }
 
     val selectedIngredients = remember(allIngredients, selectedIngredientIds.toList()) {
         selectedIngredientIds.mapNotNull { id -> allIngredients.firstOrNull { it.id == id } }
@@ -114,9 +134,24 @@ fun MacrosScreen(
         MacroSolver.calculate(selectedIngredients, mealTarget)
     }
 
-    val filteredIngredients = remember(allIngredients, searchQuery) {
-        if (searchQuery.isBlank()) allIngredients
-        else allIngredients.filter { it.name.contains(searchQuery.trim(), ignoreCase = true) }
+    val calcSuggestions = remember(allIngredients, calcSearchQuery) {
+        val q = calcSearchQuery.trim()
+        if (q.isBlank()) emptyList()
+        else allIngredients.filter { it.name.contains(q, ignoreCase = true) }
+    }
+
+    val libraryFilteredIngredients = remember(
+        allIngredients,
+        librarySearchQuery,
+        selectedMacroFilters.toList()
+    ) {
+        val q = librarySearchQuery.trim()
+        allIngredients.filter { ing ->
+            val matchesName = q.isBlank() || ing.name.contains(q, ignoreCase = true)
+            val matchesMacros = selectedMacroFilters.isEmpty() ||
+                selectedMacroFilters.all { macro -> MacroSolver.hasMacro(ing, macro) }
+            matchesName && matchesMacros
+        }
     }
 
     Box(
@@ -222,19 +257,19 @@ fun MacrosScreen(
                             MacroBadgeBox(
                                 label = "Hidratos",
                                 value = formatGramsShort(dailyTarget.carbsG),
-                                color = Color(0xFFD97706),
+                                color = CarbColor,
                                 modifier = Modifier.weight(1f)
                             )
                             MacroBadgeBox(
                                 label = "Proteínas",
                                 value = formatGramsShort(dailyTarget.proteinG),
-                                color = Color(0xFF157A4B),
+                                color = ProteinColor,
                                 modifier = Modifier.weight(1f)
                             )
                             MacroBadgeBox(
                                 label = "Grasas",
                                 value = formatGramsShort(dailyTarget.fatG),
-                                color = Color(0xFF2847D6),
+                                color = FatColor,
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -335,7 +370,11 @@ fun MacrosScreen(
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        Text(text = "${slot.emoji} ${slot.displayName}", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold), color = if (picked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+                                        Text(
+                                            text = slot.displayName,
+                                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                            color = if (picked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                        )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                             text = "${slotTarget.carbsG.roundToInt()}C · ${slotTarget.proteinG.roundToInt()}P · ${slotTarget.fatG.roundToInt()}G",
@@ -351,7 +390,7 @@ fun MacrosScreen(
                     }
                 }
 
-                // Step 2: Pick Ingredients
+                // Step 2: Type-to-search & add ingredients + removable selected chips
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(
@@ -360,13 +399,14 @@ fun MacrosScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "2. Selecciona ingredientes (${selectedIngredients.size})",
+                                text = "2. Añade ingredientes (${selectedIngredients.size})",
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onBackground
                             )
                             TextButton(
                                 onClick = {
                                     editingIngredient = null
+                                    newIngredientPrefillName = calcSearchQuery.trim()
                                     showIngredientDialog = true
                                 }
                             ) {
@@ -377,14 +417,21 @@ fun MacrosScreen(
                         }
 
                         OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            placeholder = { Text("Filtrar alimentos...", style = MaterialTheme.typography.bodySmall) },
-                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            value = calcSearchQuery,
+                            onValueChange = { calcSearchQuery = it },
+                            placeholder = {
+                                Text(
+                                    "Escribe un alimento (ej: pollo, arroz, salmón)...",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Outlined.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                            },
                             trailingIcon = {
-                                if (searchQuery.isNotBlank()) {
-                                    IconButton(onClick = { searchQuery = "" }) {
-                                        Icon(Icons.Default.Clear, contentDescription = "Limpiar")
+                                if (calcSearchQuery.isNotBlank()) {
+                                    IconButton(onClick = { calcSearchQuery = "" }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Limpiar búsqueda")
                                     }
                                 }
                             },
@@ -395,58 +442,175 @@ fun MacrosScreen(
                                 unfocusedContainerColor = MaterialTheme.colorScheme.surface,
                                 unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                             ),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("macros_calc_search_input")
                         )
 
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            filteredIngredients.forEach { ing ->
-                                val isSelected = ing.id in selectedIngredientIds
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
-                                    border = BorderStroke(
-                                        width = if (isSelected) 1.5.dp else 1.dp,
-                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-                                    ),
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .clickable {
-                                            if (isSelected) selectedIngredientIds.remove(ing.id)
-                                            else selectedIngredientIds.add(ing.id)
-                                        }
-                                        .testTag("macros_pick_ing_${ing.id}")
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                        // Suggestions list only appears while user types
+                        if (calcSearchQuery.isNotBlank()) {
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("macros_calc_suggestions_card")
+                            ) {
+                                if (calcSuggestions.isEmpty()) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        if (isSelected) {
-                                            Icon(
-                                                imageVector = Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(15.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "No se encontró \"${calcSearchQuery.trim()}\".",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        OutlinedButton(
+                                            onClick = {
+                                                editingIngredient = null
+                                                newIngredientPrefillName = calcSearchQuery.trim()
+                                                showIngredientDialog = true
+                                            }
+                                        ) {
+                                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Crear \"${calcSearchQuery.trim()}\"")
                                         }
-                                        Text(text = ing.emoji, fontSize = 15.sp)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Column {
+                                    }
+                                } else {
+                                    Column {
+                                        calcSuggestions.take(8).forEachIndexed { idx, ing ->
+                                            val isSelected = ing.id in selectedIngredientIds
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        if (isSelected) {
+                                                            selectedIngredientIds.remove(ing.id)
+                                                        } else {
+                                                            selectedIngredientIds.add(ing.id)
+                                                            calcSearchQuery = ""
+                                                        }
+                                                    }
+                                                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                                                    .testTag("macros_pick_ing_${ing.id}"),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = ing.name,
+                                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                                            fontWeight = FontWeight.SemiBold
+                                                        ),
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Text(
+                                                        text = "100g: ${formatGramsShort(ing.carbsPer100g)} HC · ${formatGramsShort(ing.proteinPer100g)} P · ${formatGramsShort(ing.fatPer100g)} G",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Surface(
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = if (isSelected) Icons.Default.Check else Icons.Default.Add,
+                                                            contentDescription = null,
+                                                            tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            modifier = Modifier.size(14.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Text(
+                                                            text = if (isSelected) "Añadido" else "Añadir",
+                                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            if (idx < minOf(calcSuggestions.size, 8) - 1) {
+                                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (selectedIngredients.isEmpty()) {
+                            Text(
+                                text = "Empieza a escribir arriba para buscar y añadir ingredientes sin llenar la pantalla.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        // Selected ingredients chips with individual remove X and Clear All
+                        if (selectedIngredients.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "En este plato (${selectedIngredients.size})",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                TextButton(
+                                    onClick = { selectedIngredientIds.clear() },
+                                    modifier = Modifier.testTag("macros_clear_all_selected")
+                                ) {
+                                    Text("Limpiar todo", style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                selectedIngredients.forEach { ing ->
+                                    Surface(
+                                        shape = RoundedCornerShape(20.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)
+                                        ) {
                                             Text(
                                                 text = ing.name,
-                                                style = MaterialTheme.typography.labelLarge.copy(
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                                ),
-                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
                                             )
-                                            Text(
-                                                text = "${formatGramsShort(ing.carbsPer100g)} HC · ${formatGramsShort(ing.proteinPer100g)} P · ${formatGramsShort(ing.fatPer100g)} G",
-                                                fontSize = 10.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(28.dp)
+                                                    .clip(CircleShape)
+                                                    .clickable { selectedIngredientIds.remove(ing.id) }
+                                                    .testTag("macros_remove_chip_${ing.id}"),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Clear,
+                                                    contentDescription = "Quitar ${ing.name}",
+                                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -474,14 +638,14 @@ fun MacrosScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = "3. Porciones calculadas (${selectedMealSlot.displayName})",
                                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = if (selectedIngredients.isEmpty()) "Selecciona arriba los alimentos de tu plato"
+                                        text = if (selectedIngredients.isEmpty()) "Añade ingredientes arriba para calcular los gramos"
                                         else "${calculationResult.achieved.kcal} kcal / ${mealTarget.kcal} kcal objetivo",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -489,7 +653,7 @@ fun MacrosScreen(
                                 }
                                 if (selectedIngredients.isNotEmpty()) {
                                     TextButton(onClick = { selectedIngredientIds.clear() }) {
-                                        Text("Limpiar", style = MaterialTheme.typography.labelMedium)
+                                        Text("Limpiar todo", style = MaterialTheme.typography.labelMedium)
                                     }
                                 }
                             }
@@ -503,11 +667,7 @@ fun MacrosScreen(
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
 
                                 calculationResult.portions.forEachIndexed { idx, portion ->
-                                    val domColor = when (portion.dominance) {
-                                        MacroDominance.CARB -> Color(0xFFD97706)
-                                        MacroDominance.PROTEIN -> Color(0xFF157A4B)
-                                        MacroDominance.FAT -> Color(0xFF2847D6)
-                                    }
+                                    val domColor = macroColor(portion.dominance)
                                     val sameGroupCount = calculationResult.portions.count { it.dominance == portion.dominance }
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -518,7 +678,12 @@ fun MacrosScreen(
                                             verticalAlignment = Alignment.CenterVertically,
                                             modifier = Modifier.weight(1f)
                                         ) {
-                                            Text(text = portion.ingredient.emoji, fontSize = 20.sp)
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(10.dp)
+                                                    .clip(CircleShape)
+                                                    .background(domColor)
+                                            )
                                             Spacer(modifier = Modifier.width(10.dp))
                                             Column {
                                                 Text(
@@ -538,17 +703,32 @@ fun MacrosScreen(
                                                 )
                                             }
                                         }
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Surface(
-                                            shape = RoundedCornerShape(10.dp),
-                                            color = domColor.copy(alpha = 0.14f)
-                                        ) {
-                                            Text(
-                                                text = "${portion.grams} g",
-                                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                                color = domColor,
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                            )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = domColor.copy(alpha = 0.14f)
+                                            ) {
+                                                Text(
+                                                    text = "${portion.grams} g",
+                                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                                    color = domColor,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = { selectedIngredientIds.remove(portion.ingredient.id) },
+                                                modifier = Modifier
+                                                    .minimumInteractiveComponentSize()
+                                                    .testTag("macros_remove_portion_${portion.ingredient.id}")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Clear,
+                                                    contentDescription = "Quitar ${portion.ingredient.name}",
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
                                         }
                                     }
                                     if (idx < calculationResult.portions.lastIndex) {
@@ -598,137 +778,261 @@ fun MacrosScreen(
                     }
                 }
             } else {
-                // Tab 2: Ingredient Library CRUD
+                // Tab 2: Ingredient Library CRUD (without restore base button, without icons, with 1/2/3 macro filter)
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Button(
+                        onClick = {
+                            editingIngredient = null
+                            newIngredientPrefillName = ""
+                            showIngredientDialog = true
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("macros_add_ingredient_button")
                     ) {
-                        Button(
-                            onClick = {
-                                editingIngredient = null
-                                showIngredientDialog = true
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("macros_add_ingredient_button")
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Añadir alimento")
-                        }
-                        OutlinedButton(
-                            onClick = { viewModel.restoreDefaultMacroIngredients() },
-                            modifier = Modifier.testTag("macros_restore_ingredients_button")
-                        ) {
-                            Icon(Icons.Outlined.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Base")
-                        }
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Añadir alimento", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
                     }
                 }
 
                 item {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text("Buscar en biblioteca...", style = MaterialTheme.typography.bodySmall) },
-                        leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        trailingIcon = {
-                            if (searchQuery.isNotBlank()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Limpiar")
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        shape = MaterialTheme.shapes.small,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                items(filteredIngredients, key = { it.id }) { ing ->
-                    val kcal100 = (ing.carbsPer100g * 4.0 + ing.proteinPer100g * 4.0 + ing.fatPer100g * 9.0).roundToInt()
-                    Surface(
-                        shape = MaterialTheme.shapes.medium,
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(MaterialTheme.shapes.medium)
-                            .clickable {
-                                editingIngredient = ing
-                                showIngredientDialog = true
-                            }
-                            .testTag("macros_library_item_${ing.id}")
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.surfaceVariant,
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(ing.emoji, fontSize = 18.sp)
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(
+                            value = librarySearchQuery,
+                            onValueChange = { librarySearchQuery = it },
+                            placeholder = { Text("Buscar por nombre...", style = MaterialTheme.typography.bodySmall) },
+                            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            trailingIcon = {
+                                if (librarySearchQuery.isNotBlank()) {
+                                    IconButton(onClick = { librarySearchQuery = "" }) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Limpiar")
                                     }
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column {
-                                    Text(
-                                        text = ing.name,
-                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
+                            },
+                            singleLine = true,
+                            shape = MaterialTheme.shapes.small,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("macros_library_search_input")
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Filtrar por macros (1, 2 o las 3)",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (selectedMacroFilters.isNotEmpty()) {
+                                Text(
+                                    text = "Quitar filtro",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable { selectedMacroFilters.clear() }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            MacroDominance.entries.forEach { macro ->
+                                val active = macro in selectedMacroFilters
+                                val color = macroColor(macro)
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (active) color.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(
+                                        width = if (active) 1.5.dp else 1.dp,
+                                        color = if (active) color else MaterialTheme.colorScheme.outlineVariant
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable {
+                                            if (active) selectedMacroFilters.remove(macro)
+                                            else selectedMacroFilters.add(macro)
+                                        }
+                                        .testTag("macros_filter_${macro.name.lowercase()}")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 9.dp),
+                                        horizontalArrangement = Arrangement.Center,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (active) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = color,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                        } else {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(8.dp)
+                                                    .clip(CircleShape)
+                                                    .background(color)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                        }
+                                        Text(
+                                            text = if (macro == MacroDominance.PROTEIN) "Proteínas" else if (macro == MacroDominance.FAT) "Grasas" else "Hidratos",
+                                            style = MaterialTheme.typography.labelMedium.copy(
+                                                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
+                                            ),
+                                            color = if (active) color else MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (libraryFilteredIngredients.isEmpty()) {
+                    item {
+                        Surface(
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(24.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Ningún alimento coincide con esos filtros",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Prueba con otra combinación de macros o añade un alimento nuevo.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (selectedMacroFilters.isNotEmpty() || librarySearchQuery.isNotBlank()) {
+                                    TextButton(onClick = {
+                                        selectedMacroFilters.clear()
+                                        librarySearchQuery = ""
+                                    }) {
+                                        Text("Mostrar todos")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    items(libraryFilteredIngredients, key = { it.id }) { ing ->
+                        val kcal100 = (ing.carbsPer100g * 4.0 + ing.proteinPer100g * 4.0 + ing.fatPer100g * 9.0).roundToInt()
+                        val meaningfulMacros = MacroDominance.entries.filter { MacroSolver.hasMacro(ing, it) }
+
+                        Surface(
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.medium)
+                                .clickable {
+                                    editingIngredient = ing
+                                    newIngredientPrefillName = ""
+                                    showIngredientDialog = true
+                                }
+                                .testTag("macros_library_item_${ing.id}")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 14.dp, end = 6.dp, top = 12.dp, bottom = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = ing.name,
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        meaningfulMacros.forEach { macro ->
+                                            val c = macroColor(macro)
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = c.copy(alpha = 0.14f)
+                                            ) {
+                                                Text(
+                                                    text = macroShortLabel(macro),
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = c,
+                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                        }
+                                    }
                                     Text(
                                         text = "100g: ${formatGramsShort(ing.carbsPer100g)} HC · ${formatGramsShort(ing.proteinPer100g)} P · ${formatGramsShort(ing.fatPer100g)} G · $kcal100 kcal",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                            }
-                            Row {
-                                IconButton(
-                                    onClick = {
-                                        editingIngredient = ing
-                                        showIngredientDialog = true
-                                    },
-                                    modifier = Modifier.minimumInteractiveComponentSize()
-                                ) {
-                                    Icon(
-                                        Icons.Outlined.Edit,
-                                        contentDescription = "Editar alimento",
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                IconButton(
-                                    onClick = {
-                                        selectedIngredientIds.remove(ing.id)
-                                        viewModel.deleteMacroIngredient(ing)
-                                    },
-                                    modifier = Modifier.minimumInteractiveComponentSize()
-                                ) {
-                                    Icon(
-                                        Icons.Outlined.Delete,
-                                        contentDescription = "Eliminar alimento",
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(18.dp)
-                                    )
+                                Row {
+                                    IconButton(
+                                        onClick = {
+                                            editingIngredient = ing
+                                            newIngredientPrefillName = ""
+                                            showIngredientDialog = true
+                                        },
+                                        modifier = Modifier.minimumInteractiveComponentSize()
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Edit,
+                                            contentDescription = "Editar alimento",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            selectedIngredientIds.remove(ing.id)
+                                            viewModel.deleteMacroIngredient(ing)
+                                        },
+                                        modifier = Modifier.minimumInteractiveComponentSize()
+                                    ) {
+                                        Icon(
+                                            Icons.Outlined.Delete,
+                                            contentDescription = "Eliminar alimento",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -752,6 +1056,7 @@ fun MacrosScreen(
     if (showIngredientDialog) {
         MacroIngredientEditorDialog(
             initialIngredient = editingIngredient,
+            initialName = newIngredientPrefillName,
             onDismiss = { showIngredientDialog = false },
             onSave = { name, emoji, carbs, protein, fat ->
                 val editing = editingIngredient
@@ -768,6 +1073,7 @@ fun MacrosScreen(
                         )
                     )
                 }
+                newIngredientPrefillName = ""
                 showIngredientDialog = false
             }
         )
@@ -806,27 +1112,27 @@ private fun MacroBadgeBox(
 
 @Composable
 private fun MacroComparisonBars(
-    achieved: com.example.data.model.MacroTriple,
-    target: com.example.data.model.MacroTriple
+    achieved: MacroTriple,
+    target: MacroTriple
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         MacroProgressRow(
             label = "Hidratos",
             achieved = achieved.carbsG,
             target = target.carbsG,
-            barColor = Color(0xFFD97706)
+            barColor = CarbColor
         )
         MacroProgressRow(
             label = "Proteínas",
             achieved = achieved.proteinG,
             target = target.proteinG,
-            barColor = Color(0xFF157A4B)
+            barColor = ProteinColor
         )
         MacroProgressRow(
             label = "Grasas",
             achieved = achieved.fatG,
             target = target.fatG,
-            barColor = Color(0xFF2847D6)
+            barColor = FatColor
         )
     }
 }

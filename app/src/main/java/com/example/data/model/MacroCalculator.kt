@@ -103,6 +103,19 @@ object MacroSolver {
         }
     }
 
+    fun hasMacro(ingredient: MacroIngredient, macro: MacroDominance): Boolean {
+        val cKcal = ingredient.carbsPer100g * 4.0
+        val pKcal = ingredient.proteinPer100g * 4.0
+        val fKcal = ingredient.fatPer100g * 9.0
+        val totalKcal = cKcal + pKcal + fKcal
+        if (totalKcal <= 0.0) return false
+        return when (macro) {
+            MacroDominance.CARB -> ingredient.carbsPer100g >= 10.0 || (cKcal / totalKcal) >= 0.20
+            MacroDominance.PROTEIN -> ingredient.proteinPer100g >= 8.0 || (pKcal / totalKcal) >= 0.18
+            MacroDominance.FAT -> ingredient.fatPer100g >= 5.0 || (fKcal / totalKcal) >= 0.20
+        }
+    }
+
     private fun macroValueFor(ingredient: MacroIngredient, dominance: MacroDominance): Double =
         when (dominance) {
             MacroDominance.CARB -> ingredient.carbsPer100g

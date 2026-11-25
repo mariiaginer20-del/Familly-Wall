@@ -377,41 +377,46 @@ fun CalendarScreen(
                                                             else -> MaterialTheme.colorScheme.onSurface
                                                         }
                                                     )
-                                                    if (dayEvents.isNotEmpty()) {
-                                                        Spacer(modifier = Modifier.height(2.dp))
-                                                        val hasOverflow = dayEvents.size > 5
-                                                        val visibleDotEvents = if (hasOverflow) dayEvents.take(4) else dayEvents
-                                                        Row(
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                                            modifier = if (isSelected) {
-                                                                Modifier
-                                                                    .clip(RoundedCornerShape(50))
-                                                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
-                                                                    .padding(horizontal = 4.dp, vertical = 2.dp)
-                                                            } else {
-                                                                Modifier
-                                                            }
-                                                        ) {
-                                                            visibleDotEvents.forEach { ev ->
-                                                                val dotColor = runCatching {
-                                                                    Color(android.graphics.Color.parseColor(ev.memberColorHex))
-                                                                }.getOrDefault(MaterialTheme.colorScheme.secondary)
-                                                                Box(
-                                                                    modifier = Modifier
-                                                                        .size(5.dp)
-                                                                        .clip(CircleShape)
-                                                                        .background(dotColor)
-                                                                )
-                                                            }
-                                                            if (hasOverflow) {
-                                                                Text(
-                                                                    text = "+",
-                                                                    fontSize = 8.sp,
-                                                                    lineHeight = 8.sp,
-                                                                    fontWeight = FontWeight.Bold,
-                                                                    color = MaterialTheme.colorScheme.onSurface
-                                                                )
+                                                    Spacer(modifier = Modifier.height(2.dp))
+                                                    Box(
+                                                        modifier = Modifier.height(10.dp),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        if (dayEvents.isNotEmpty()) {
+                                                            val hasOverflow = dayEvents.size > 5
+                                                            val visibleDotEvents = if (hasOverflow) dayEvents.take(4) else dayEvents
+                                                            Row(
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                                                modifier = if (isSelected) {
+                                                                    Modifier
+                                                                        .clip(RoundedCornerShape(50))
+                                                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
+                                                                        .padding(horizontal = 4.dp, vertical = 1.5.dp)
+                                                                } else {
+                                                                    Modifier
+                                                                }
+                                                            ) {
+                                                                visibleDotEvents.forEach { ev ->
+                                                                    val dotColor = runCatching {
+                                                                        Color(android.graphics.Color.parseColor(ev.memberColorHex))
+                                                                    }.getOrDefault(MaterialTheme.colorScheme.secondary)
+                                                                    Box(
+                                                                        modifier = Modifier
+                                                                            .size(5.dp)
+                                                                            .clip(CircleShape)
+                                                                            .background(dotColor)
+                                                                    )
+                                                                }
+                                                                if (hasOverflow) {
+                                                                    Text(
+                                                                        text = "+",
+                                                                        fontSize = 8.sp,
+                                                                        lineHeight = 8.sp,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        color = MaterialTheme.colorScheme.onSurface
+                                                                    )
+                                                                }
                                                             }
                                                         }
                                                     }

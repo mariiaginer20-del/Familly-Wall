@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.data.model.CalendarEvent
 import com.example.data.model.EventReminderOptions
+import com.example.data.model.FamilyTask
 import com.example.data.model.resolvedReminders
 import java.util.Calendar
 
@@ -174,6 +175,71 @@ class FamilyNotificationManager(private val context: Context) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         EventReminderOptions.options.forEach { (mins, _) ->
             val reqCode = ("${eventId}_$mins".hashCode()) and 0x7FFFFFFF
+            val intent = Intent(context, EventReminderReceiver::class.java)
+            val pi = PendingIntent.getBroadcast(
+                context,
+                reqCode,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_NO_CREATE
+            )
+            if (pi != null) {
+                alarmManager.cancel(pi)
+                pi.cancel()
+            }
+        }
+    }
+
+    fun scheduleTaskReminders(task: FamilyTask) {
+        if (task.id.isBlank()) return
+        cancelTaskReminders(task.id)
+        if (task.completed || task.dueEpochMillis <= 0L || task.reminderMinutesList.isEmpty()) return
+
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val dueCal = Calendar.getInstance().apply {
+            timeInMillis = task.dueEpochMillis
+            val parts = task.dueTime.split(":")
+            val hour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 9
+            val min = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, min)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        val dueMillis = dueCal.timeInMillis
+        val now = System.currentTimeMillis()
+        val timeLabel = task.dueTime.ifBlank { "09:00" }
+
+        task.reminderMinutesList.distinct().forEach { mins ->
+            val triggerAt = dueMillis - mins * 60_000L
+            if (triggerAt > now) {
+                val reqCode = ("task_${task.id}_$mins".hashCode()) and 0x7FFFFFFF
+                val remindText = EventReminderOptions.formatShort(mins)
+                val intent = Intent(context, EventReminderReceiver::class.java).apply {
+                    putExtra(EventReminderReceiver.EXTRA_TITLE, "Tarea ($remindText): ${task.title}")
+                    putExtra(EventReminderReceiver.EXTRA_MESSAGE, "${task.dueDate} $timeLabel · ${task.assignedMemberName}")
+                    putExtra(EventReminderReceiver.EXTRA_NOTIF_ID, reqCode)
+                }
+                val pi = PendingIntent.getBroadcast(
+                    context,
+                    reqCode,
+                    intent,
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+                try {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+                } catch (_: SecurityException) {
+                    // Handled safely without privileged exact-alarm permissions
+                }
+            }
+        }
+    }
+
+    fun cancelTaskReminders(taskId: String) {
+        if (taskId.isBlank()) return
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        EventReminderOptions.options.forEach { (mins, _) ->
+            val reqCode = ("task_${taskId}_$mins".hashCode()) and 0x7FFFFFFF
             val intent = Intent(context, EventReminderReceiver::class.java)
             val pi = PendingIntent.getBroadcast(
                 context,
