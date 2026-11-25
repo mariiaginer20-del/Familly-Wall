@@ -1196,7 +1196,9 @@ private fun CreateCustomListDialog(
                 Text("Color", style = MaterialTheme.typography.labelMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     colorOptions.forEach { hex ->
-                        val c = Color(android.graphics.Color.parseColor(hex))
+                        val c = runCatching {
+                            Color(android.graphics.Color.parseColor(hex))
+                        }.getOrDefault(MaterialTheme.colorScheme.primary)
                         Surface(
                             shape = CircleShape,
                             color = c,

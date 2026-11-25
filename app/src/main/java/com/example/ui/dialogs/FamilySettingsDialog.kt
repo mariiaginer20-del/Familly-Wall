@@ -399,7 +399,9 @@ fun FamilySettingsDialog(
                                 }
                                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     listOf("#0D9488", "#C25934", "#2847D6", "#D97706", "#6D3FB8").forEach { hex ->
-                                        val c = Color(android.graphics.Color.parseColor(hex))
+                                        val c = runCatching {
+                                            Color(android.graphics.Color.parseColor(hex))
+                                        }.getOrDefault(MaterialTheme.colorScheme.primary)
                                         Box(
                                             modifier = Modifier
                                                 .size(26.dp)

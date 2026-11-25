@@ -4,10 +4,13 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 
 enum class AppDesignStyle(val title: String, val subtitle: String) {
     EDITORIAL("Editorial Cálido", "Tipografía serif clásica, tonos salvia y papel cálido"),
@@ -31,23 +34,35 @@ class ThemePreferences(private val context: Context) {
     private val keyStyle = stringPreferencesKey("design_style")
     private val keyDarkMode = stringPreferencesKey("dark_mode")
 
-    val settingsFlow: Flow<AppearanceSettings> = context.appearanceDataStore.data.map { prefs ->
-        val styleRaw = prefs[keyStyle]
-        val darkRaw = prefs[keyDarkMode]
-        val style = AppDesignStyle.entries.firstOrNull { it.name == styleRaw } ?: AppDesignStyle.EDITORIAL
-        val dark = ThemeDarkMode.entries.firstOrNull { it.name == darkRaw } ?: ThemeDarkMode.SYSTEM
-        AppearanceSettings(designStyle = style, darkMode = dark)
-    }
+    val settingsFlow: Flow<AppearanceSettings> = context.appearanceDataStore.data
+        .catch { exception ->
+            if (exception is IOException) {
+                emit(emptyPreferences())
+            } else {
+                throw exception
+            }
+        }
+        .map { prefs ->
+            val styleRaw = prefs[keyStyle]
+            val darkRaw = prefs[keyDarkMode]
+            val style = AppDesignStyle.entries.firstOrNull { it.name == styleRaw } ?: AppDesignStyle.EDITORIAL
+            val dark = ThemeDarkMode.entries.firstOrNull { it.name == darkRaw } ?: ThemeDarkMode.SYSTEM
+            AppearanceSettings(designStyle = style, darkMode = dark)
+        }
 
     suspend fun setDesignStyle(style: AppDesignStyle) {
-        context.appearanceDataStore.edit { prefs ->
-            prefs[keyStyle] = style.name
+        runCatching {
+            context.appearanceDataStore.edit { prefs ->
+                prefs[keyStyle] = style.name
+            }
         }
     }
 
     suspend fun setDarkMode(mode: ThemeDarkMode) {
-        context.appearanceDataStore.edit { prefs ->
-            prefs[keyDarkMode] = mode.name
+        runCatching {
+            context.appearanceDataStore.edit { prefs ->
+                prefs[keyDarkMode] = mode.name
+            }
         }
     }
 }

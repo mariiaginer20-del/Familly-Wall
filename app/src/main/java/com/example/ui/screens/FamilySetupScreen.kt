@@ -302,7 +302,9 @@ fun FamilySetupScreen(
                         Spacer(modifier = Modifier.height(6.dp))
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             colorOptions.forEach { hex ->
-                                val c = Color(android.graphics.Color.parseColor(hex))
+                                val c = runCatching {
+                                    Color(android.graphics.Color.parseColor(hex))
+                                }.getOrDefault(MaterialTheme.colorScheme.primary)
                                 val picked = selectedColorHex == hex
                                 Box(
                                     modifier = Modifier
@@ -343,14 +345,15 @@ fun FamilySetupScreen(
                         }
                     }
 
-                    if (errorMsg != null) {
+                    val activeErrorMsg = errorMsg
+                    if (activeErrorMsg != null) {
                         Surface(
                             shape = MaterialTheme.shapes.small,
                             color = MaterialTheme.colorScheme.errorContainer,
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                text = errorMsg!!,
+                                text = activeErrorMsg,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                                 modifier = Modifier.padding(12.dp)

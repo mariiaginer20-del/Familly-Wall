@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import android.content.Context
+import android.util.Log
 import com.example.R
 import com.example.data.model.CalendarEvent
 import com.example.data.model.CategoryScope
@@ -74,7 +75,13 @@ class FirestoreRepository(
                 .whereArrayContains("memberUids", uid)
                 .snapshots()
                 .map { snapshot ->
-                    snapshot.toObjects(clazz, ServerTimestampBehavior.ESTIMATE)
+                    snapshot.documents.mapNotNull { doc ->
+                        runCatching {
+                            doc.toObject(clazz, ServerTimestampBehavior.ESTIMATE)
+                        }.onFailure { err ->
+                            Log.w("FirestoreRepo", "Failed to deserialize ${doc.reference.path}", err)
+                        }.getOrNull()
+                    }
                 }
                 .catch { error ->
                     val firestoreError = generateSequence(error) { it.cause }

@@ -57,11 +57,16 @@ import com.example.ui.auth.onGoogleSignInClicked
 @Composable
 fun AuthScreen(
     onAuthSuccess: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    credentialManager: CredentialManager? = null,
+    signInScope: kotlinx.coroutines.CoroutineScope? = null
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val credentialManager = remember { CredentialManager.create(context) }
+    val fallbackScope = rememberCoroutineScope()
+    val activeScope = signInScope ?: fallbackScope
+    val activeCredentialManager = credentialManager ?: remember(context) {
+        CredentialManager.create(context.applicationContext)
+    }
 
     var isLoading by remember { mutableStateOf(false) }
     var isCheckingSilent by remember { mutableStateOf(true) }
@@ -70,7 +75,7 @@ fun AuthScreen(
     LaunchedEffect(Unit) {
         attemptAutoSignIn(
             context = context,
-            credentialManager = credentialManager,
+            credentialManager = activeCredentialManager,
             onAuthSuccess = {
                 isCheckingSilent = false
                 onAuthSuccess()
@@ -78,7 +83,7 @@ fun AuthScreen(
             onUnauthenticated = {
                 isCheckingSilent = false
             },
-            scope = scope
+            scope = activeScope
         )
     }
 
@@ -178,7 +183,8 @@ fun AuthScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            if (errorMessage != null) {
+            val activeError = errorMessage
+            if (activeError != null) {
                 Surface(
                     shape = MaterialTheme.shapes.small,
                     color = MaterialTheme.colorScheme.errorContainer,
@@ -187,7 +193,7 @@ fun AuthScreen(
                         .padding(bottom = 12.dp)
                 ) {
                     Text(
-                        text = errorMessage!!,
+                        text = activeError,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         modifier = Modifier.padding(12.dp)
@@ -197,11 +203,12 @@ fun AuthScreen(
 
             Button(
                 onClick = {
+                    if (isLoading || isCheckingSilent) return@Button
                     errorMessage = null
                     isLoading = true
                     onGoogleSignInClicked(
                         context = context,
-                        credentialManager = credentialManager,
+                        credentialManager = activeCredentialManager,
                         onAuthSuccess = {
                             isLoading = false
                             onAuthSuccess()
@@ -210,7 +217,7 @@ fun AuthScreen(
                             isLoading = false
                             errorMessage = msg
                         },
-                        scope = scope,
+                        scope = activeScope,
                         onAuthCancelled = {
                             isLoading = false
                         }

@@ -1,6 +1,7 @@
 package com.example
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -8,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,6 +57,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -102,6 +105,7 @@ import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.firestore
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -138,14 +142,20 @@ fun AppNavigation(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val credentialManager = remember { CredentialManager.create(context) }
+    val credentialManager = remember(context.applicationContext) {
+        CredentialManager.create(context.applicationContext)
+    }
 
     val authUser by remember { Firebase.auth.authStateFlow() }
         .collectAsStateWithLifecycle(initialValue = Firebase.auth.currentUser)
 
     val uid = authUser?.uid
     if (uid == null) {
-        AuthScreen(onAuthSuccess = {})
+        AuthScreen(
+            onAuthSuccess = {},
+            credentialManager = credentialManager,
+            signInScope = scope
+        )
         return
     }
 
@@ -314,6 +324,7 @@ fun MainApp(
 
     var showSettingsDialog by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
 
@@ -329,9 +340,22 @@ fun MainApp(
         }
     )
 
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    var hasCheckedNotificationPermission by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(viewModel.currentUserId) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasCheckedNotificationPermission) {
+            hasCheckedNotificationPermission = true
+            val alreadyGranted = runCatching {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            }.getOrDefault(true)
+            if (!alreadyGranted) {
+                delay(350)
+                runCatching {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
         }
     }
 
@@ -720,9 +744,10 @@ fun MainApp(
         )
     }
 
-    if (manageCategoriesScope != null) {
+    val activeCategoriesScope = manageCategoriesScope
+    if (activeCategoriesScope != null) {
         ManageCategoriesDialog(
-            initialScope = manageCategoriesScope!!,
+            initialScope = activeCategoriesScope,
             allCategories = allCategories,
             onAddCategory = { scopeCat, name, emoji, colorHex ->
                 viewModel.addCategory(scopeCat, name, emoji, colorHex)

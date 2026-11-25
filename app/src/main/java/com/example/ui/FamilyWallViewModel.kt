@@ -227,108 +227,141 @@ class FamilyWallViewModel(
 
     init {
         viewModelScope.launch {
-            familyUnitState.collect { state ->
-                val family = (state as? UiState.Success)?.data ?: return@collect
-                val sig = "${family.id}:${family.memberUids.sorted().joinToString(",")}"
-                if (sig != lastSyncedSignature && family.memberUids.isNotEmpty()) {
-                    lastSyncedSignature = sig
-                    repository.syncMemberUidsAcrossFamily(family)
+            familyUnitState
+                .catch { error ->
+                    if (error is CancellationException) throw error
+                    Log.w(TAG, "Error in family init sync stream", error)
                 }
-                if (family.id != lastCategorySeededFamilyId && family.memberUids.isNotEmpty()) {
-                    lastCategorySeededFamilyId = family.id
-                    repository.seedDefaultCategoriesIfNeeded(
-                        familyId = family.id,
-                        memberUids = family.memberUids,
-                        onlyIfCompletelyEmpty = true
-                    )
+                .collect { state ->
+                    try {
+                        val family = (state as? UiState.Success)?.data ?: return@collect
+                        val sig = "${family.id}:${family.memberUids.sorted().joinToString(",")}"
+                        if (sig != lastSyncedSignature && family.memberUids.isNotEmpty()) {
+                            lastSyncedSignature = sig
+                            repository.syncMemberUidsAcrossFamily(family)
+                        }
+                        if (family.id != lastCategorySeededFamilyId && family.memberUids.isNotEmpty()) {
+                            lastCategorySeededFamilyId = family.id
+                            repository.seedDefaultCategoriesIfNeeded(
+                                familyId = family.id,
+                                memberUids = family.memberUids,
+                                onlyIfCompletelyEmpty = true
+                            )
+                        }
+                        if (family.id != lastMacroSeededFamilyId && family.memberUids.isNotEmpty()) {
+                            lastMacroSeededFamilyId = family.id
+                            repository.seedDefaultMacroIngredientsIfNeeded(
+                                familyId = family.id,
+                                memberUids = family.memberUids,
+                                onlyIfCompletelyEmpty = true
+                            )
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "Error during family init sync", t)
+                    }
                 }
-                if (family.id != lastMacroSeededFamilyId && family.memberUids.isNotEmpty()) {
-                    lastMacroSeededFamilyId = family.id
-                    repository.seedDefaultMacroIngredientsIfNeeded(
-                        familyId = family.id,
-                        memberUids = family.memberUids,
-                        onlyIfCompletelyEmpty = true
-                    )
-                }
-            }
         }
 
         // Schedule local reminders on every assigned member's device when Firestore syncs events
         viewModelScope.launch {
             combine(allEvents, userProfileState, allMembers) { events, profileState, members ->
                 Triple(events, (profileState as? UiState.Success)?.data, members)
-            }.collect { (events, profile, members) ->
-                val myName = members.firstOrNull { it.linkedUid == currentUserId }?.name
-                    ?.takeIf { it.isNotBlank() }
-                    ?: profile?.displayName?.takeIf { it.isNotBlank() }
+            }
+                .catch { error ->
+                    if (error is CancellationException) throw error
+                    Log.w(TAG, "Error observing events for reminders", error)
+                }
+                .collect { (events, profile, members) ->
+                    try {
+                        val myName = members.firstOrNull { it.linkedUid == currentUserId }?.name
+                            ?.takeIf { it.isNotBlank() }
+                            ?: profile?.displayName?.takeIf { it.isNotBlank() }
 
-                val nextSignatures = mutableMapOf<String, String>()
-                events.forEach { ev ->
-                    val isAssignedToMe =
-                        ev.assignedMemberName.equals("Todos", ignoreCase = true) ||
-                        ev.assignedMemberName.equals("Cualquiera", ignoreCase = true) ||
-                        (myName != null && ev.assignedMemberName.equals(myName, ignoreCase = true))
+                        val nextSignatures = mutableMapOf<String, String>()
+                        events.forEach { ev ->
+                            val isAssignedToMe =
+                                ev.assignedMemberName.equals("Todos", ignoreCase = true) ||
+                                ev.assignedMemberName.equals("Cualquiera", ignoreCase = true) ||
+                                (myName != null && ev.assignedMemberName.equals(myName, ignoreCase = true))
 
-                    if (isAssignedToMe && ev.id.isNotBlank()) {
-                        val remindersSig = ev.resolvedReminders().sorted().joinToString(",")
-                        val sig = "${ev.title}|${ev.dateEpochMillis}|${ev.allDay}|${ev.startTime}|${ev.endTime}|${ev.assignedMemberName}|$remindersSig"
-                        nextSignatures[ev.id] = sig
-                        if (lastScheduledEventSignatures[ev.id] != sig) {
-                            notificationManager.scheduleEventReminders(ev)
+                            if (isAssignedToMe && ev.id.isNotBlank()) {
+                                val remindersSig = ev.resolvedReminders().sorted().joinToString(",")
+                                val sig = "${ev.title}|${ev.dateEpochMillis}|${ev.allDay}|${ev.startTime}|${ev.endTime}|${ev.assignedMemberName}|$remindersSig"
+                                nextSignatures[ev.id] = sig
+                                if (lastScheduledEventSignatures[ev.id] != sig) {
+                                    notificationManager.scheduleEventReminders(ev)
+                                }
+                            }
                         }
+
+                        lastScheduledEventSignatures.keys
+                            .filter { it !in nextSignatures }
+                            .forEach { removedId ->
+                                notificationManager.cancelEventReminders(removedId)
+                            }
+
+                        lastScheduledEventSignatures = nextSignatures
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "Failed syncing event reminders", t)
                     }
                 }
-
-                lastScheduledEventSignatures.keys
-                    .filter { it !in nextSignatures }
-                    .forEach { removedId ->
-                        notificationManager.cancelEventReminders(removedId)
-                    }
-
-                lastScheduledEventSignatures = nextSignatures
-            }
         }
 
         // Schedule local reminders on every assigned member's device when Firestore syncs tasks
         viewModelScope.launch {
             combine(allTasks, userProfileState, allMembers) { tasks, profileState, members ->
                 Triple(tasks, (profileState as? UiState.Success)?.data, members)
-            }.collect { (tasks, profile, members) ->
-                val myName = members.firstOrNull { it.linkedUid == currentUserId }?.name
-                    ?.takeIf { it.isNotBlank() }
-                    ?: profile?.displayName?.takeIf { it.isNotBlank() }
+            }
+                .catch { error ->
+                    if (error is CancellationException) throw error
+                    Log.w(TAG, "Error observing tasks for reminders", error)
+                }
+                .collect { (tasks, profile, members) ->
+                    try {
+                        val myName = members.firstOrNull { it.linkedUid == currentUserId }?.name
+                            ?.takeIf { it.isNotBlank() }
+                            ?: profile?.displayName?.takeIf { it.isNotBlank() }
 
-                val nextTaskSignatures = mutableMapOf<String, String>()
-                tasks.forEach { task ->
-                    val isAssignedToMe =
-                        task.assignedMemberName.equals("Todos", ignoreCase = true) ||
-                        task.assignedMemberName.equals("Cualquiera", ignoreCase = true) ||
-                        (myName != null && task.assignedMemberName.equals(myName, ignoreCase = true))
+                        val nextTaskSignatures = mutableMapOf<String, String>()
+                        tasks.forEach { task ->
+                            val isAssignedToMe =
+                                task.assignedMemberName.equals("Todos", ignoreCase = true) ||
+                                task.assignedMemberName.equals("Cualquiera", ignoreCase = true) ||
+                                (myName != null && task.assignedMemberName.equals(myName, ignoreCase = true))
 
-                    if (
-                        isAssignedToMe &&
-                        !task.completed &&
-                        task.id.isNotBlank() &&
-                        task.dueEpochMillis > 0L &&
-                        task.reminderMinutesList.isNotEmpty()
-                    ) {
-                        val remindersSig = task.reminderMinutesList.distinct().sorted().joinToString(",")
-                        val sig = "${task.title}|${task.dueDate}|${task.dueEpochMillis}|${task.dueTime}|${task.assignedMemberName}|$remindersSig"
-                        nextTaskSignatures[task.id] = sig
-                        if (lastScheduledTaskSignatures[task.id] != sig) {
-                            notificationManager.scheduleTaskReminders(task)
+                            if (
+                                isAssignedToMe &&
+                                !task.completed &&
+                                task.id.isNotBlank() &&
+                                task.dueEpochMillis > 0L &&
+                                task.reminderMinutesList.isNotEmpty()
+                            ) {
+                                val remindersSig = task.reminderMinutesList.distinct().sorted().joinToString(",")
+                                val sig = "${task.title}|${task.dueDate}|${task.dueEpochMillis}|${task.dueTime}|${task.assignedMemberName}|$remindersSig"
+                                nextTaskSignatures[task.id] = sig
+                                if (lastScheduledTaskSignatures[task.id] != sig) {
+                                    notificationManager.scheduleTaskReminders(task)
+                                }
+                            }
                         }
+
+                        lastScheduledTaskSignatures.keys
+                            .filter { it !in nextTaskSignatures }
+                            .forEach { removedId ->
+                                notificationManager.cancelTaskReminders(removedId)
+                            }
+
+                        lastScheduledTaskSignatures = nextTaskSignatures
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "Failed syncing task reminders", t)
                     }
                 }
-
-                lastScheduledTaskSignatures.keys
-                    .filter { it !in nextTaskSignatures }
-                    .forEach { removedId ->
-                        notificationManager.cancelTaskReminders(removedId)
-                    }
-
-                lastScheduledTaskSignatures = nextTaskSignatures
-            }
         }
     }
 
