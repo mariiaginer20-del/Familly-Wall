@@ -163,8 +163,11 @@ service cloud.firestore {
       return isValidId(data.familyId) &&
              data.dayOfWeekIndex is int && data.dayOfWeekIndex >= 0 && data.dayOfWeekIndex <= 13 &&
              data.mealType in ['DESAYUNO', 'COMIDA', 'MERIENDA', 'CENA'] &&
-             data.dishName is string && data.dishName.size() >= 1 && data.dishName.size() <= 120 &&
+             data.dishName is string && data.dishName.size() <= 120 &&
              (!('recipeId' in data) || isValidId(data.recipeId)) &&
+             (!('additionalDishName' in data) || (data.additionalDishName is string && data.additionalDishName.size() <= 120)) &&
+             (!('additionalRecipeId' in data) || isValidId(data.additionalRecipeId)) &&
+             (data.dishName.size() >= 1 || ('additionalDishName' in data && data.additionalDishName.size() >= 1)) &&
              data.notes is string && data.notes.size() <= 300 &&
              data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
              isValidUidList(data.memberUids);
@@ -239,9 +242,14 @@ service cloud.firestore {
       return isValidId(data.familyId) &&
              data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
              data.emoji is string && data.emoji.size() >= 1 && data.emoji.size() <= 16 &&
-             data.carbsPer100g is number && data.carbsPer100g >= 0 && data.carbsPer100g <= 100 &&
-             data.proteinPer100g is number && data.proteinPer100g >= 0 && data.proteinPer100g <= 100 &&
-             data.fatPer100g is number && data.fatPer100g >= 0 && data.fatPer100g <= 100 &&
+             data.carbsPer100g is number && data.carbsPer100g >= 0 && data.carbsPer100g <= 5000 &&
+             data.proteinPer100g is number && data.proteinPer100g >= 0 && data.proteinPer100g <= 5000 &&
+             data.fatPer100g is number && data.fatPer100g >= 0 && data.fatPer100g <= 5000 &&
+             (!data.keys().hasAny(['referenceQuantity']) || (data.referenceQuantity is number && data.referenceQuantity > 0 && data.referenceQuantity <= 10000)) &&
+             (!data.keys().hasAny(['referenceUnit']) || (data.referenceUnit is string && data.referenceUnit.size() >= 1 && data.referenceUnit.size() <= 24)) &&
+             (!data.keys().hasAny(['carbsPerRef']) || (data.carbsPerRef is number && data.carbsPerRef >= 0 && data.carbsPerRef <= 5000)) &&
+             (!data.keys().hasAny(['proteinPerRef']) || (data.proteinPerRef is number && data.proteinPerRef >= 0 && data.proteinPerRef <= 5000)) &&
+             (!data.keys().hasAny(['fatPerRef']) || (data.fatPerRef is number && data.fatPerRef >= 0 && data.fatPerRef <= 5000)) &&
              data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
              isValidUidList(data.memberUids);
     }
@@ -548,7 +556,7 @@ service cloud.firestore {
         allow create: if isSignedIn() &&
                          isValidId(mealPlanId) &&
                          incoming().keys().hasAll(['familyId', 'dayOfWeekIndex', 'mealType', 'dishName', 'notes', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
-                         incoming().keys().hasOnly(['familyId', 'dayOfWeekIndex', 'mealType', 'dishName', 'recipeId', 'notes', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'dayOfWeekIndex', 'mealType', 'dishName', 'recipeId', 'additionalDishName', 'additionalRecipeId', 'notes', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
                          incoming().familyId == familyId &&
                          incoming().createdByUid == request.auth.uid &&
                          request.auth.uid in incoming().memberUids &&
@@ -566,7 +574,7 @@ service cloud.firestore {
                          isValidTimestamp(incoming().updatedAt) &&
                          isFamilyMemberDoc(familyId) && (
                            (incoming().memberUids == existing().memberUids &&
-                            incoming().diff(existing()).affectedKeys().hasOnly(['dayOfWeekIndex', 'mealType', 'dishName', 'recipeId', 'notes', 'updatedAt'])) ||
+                            incoming().diff(existing()).affectedKeys().hasOnly(['dayOfWeekIndex', 'mealType', 'dishName', 'recipeId', 'additionalDishName', 'additionalRecipeId', 'notes', 'updatedAt'])) ||
                            (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
                             incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
                          );
@@ -748,7 +756,7 @@ service cloud.firestore {
         allow create: if isSignedIn() &&
                          isValidId(ingredientId) &&
                          incoming().keys().hasAll(['familyId', 'name', 'emoji', 'carbsPer100g', 'proteinPer100g', 'fatPer100g', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
-                         incoming().keys().hasOnly(['familyId', 'name', 'emoji', 'carbsPer100g', 'proteinPer100g', 'fatPer100g', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'name', 'emoji', 'carbsPer100g', 'proteinPer100g', 'fatPer100g', 'referenceQuantity', 'referenceUnit', 'carbsPerRef', 'proteinPerRef', 'fatPerRef', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
                          incoming().familyId == familyId &&
                          incoming().createdByUid == request.auth.uid &&
                          request.auth.uid in incoming().memberUids &&
@@ -766,7 +774,7 @@ service cloud.firestore {
                          isValidTimestamp(incoming().updatedAt) &&
                          isFamilyMemberDoc(familyId) && (
                            (incoming().memberUids == existing().memberUids &&
-                            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'emoji', 'carbsPer100g', 'proteinPer100g', 'fatPer100g', 'updatedAt'])) ||
+                            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'emoji', 'carbsPer100g', 'proteinPer100g', 'fatPer100g', 'referenceQuantity', 'referenceUnit', 'carbsPerRef', 'proteinPerRef', 'fatPerRef', 'updatedAt'])) ||
                            (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
                             incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
                          );

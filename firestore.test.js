@@ -381,17 +381,26 @@ test("Shopping items, tasks, custom lists, calendar events, meal plans, recipes 
     })
   );
 
+  const mealPlanRef = aliceDb.collection("families").doc("fam_1").collection("mealPlans").doc("slot_12_CENA");
   await assertSucceeds(
-    aliceDb.collection("families").doc("fam_1").collection("mealPlans").doc("slot_12_CENA").set({
+    mealPlanRef.set({
       familyId: "fam_1",
       dayOfWeekIndex: 12,
       mealType: "CENA",
       dishName: "Salmón al horno",
+      additionalDishName: "Ensalada de pollo",
       notes: "",
       createdByUid: ALICE_UID,
       memberUids: [ALICE_UID],
       createdAt: now,
       updatedAt: now,
+    })
+  );
+  await assertSucceeds(
+    mealPlanRef.update({
+      dishName: "",
+      additionalDishName: "Tortilla francesa",
+      updatedAt: past(),
     })
   );
 
@@ -528,6 +537,11 @@ test("Shopping items, tasks, custom lists, calendar events, meal plans, recipes 
       carbsPer100g: 0,
       proteinPer100g: 20,
       fatPer100g: 13,
+      referenceQuantity: 75,
+      referenceUnit: "g",
+      carbsPerRef: 0,
+      proteinPerRef: 15,
+      fatPerRef: 9.75,
       createdByUid: ALICE_UID,
       memberUids: [ALICE_UID],
       createdAt: now,
@@ -536,14 +550,22 @@ test("Shopping items, tasks, custom lists, calendar events, meal plans, recipes 
   );
   await assertSucceeds(
     macroIngRef.update({
-      fatPer100g: 12.5,
+      referenceQuantity: 1,
+      referenceUnit: "L",
+      carbsPerRef: 48,
+      proteinPerRef: 32,
+      fatPerRef: 36,
+      carbsPer100g: 4.8,
+      proteinPer100g: 3.2,
+      fatPer100g: 3.6,
       updatedAt: past(),
     })
   );
   await assertSucceeds(
     aliceDb.collection("families").doc("fam_1").collection("macroIngredients").where("memberUids", "array-contains", ALICE_UID).get()
   );
-  await assertFails(macroIngRef.update({ proteinPer100g: 120, updatedAt: past() }));
+  await assertFails(macroIngRef.update({ proteinPer100g: -1, updatedAt: past() }));
+  await assertFails(macroIngRef.update({ referenceQuantity: 0, updatedAt: past() }));
   await assertFails(eveDb.collection("families").doc("fam_1").collection("macroIngredients").doc("ing_salmon").delete());
   await assertSucceeds(macroIngRef.delete());
 });

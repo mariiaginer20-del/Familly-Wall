@@ -967,9 +967,9 @@ fun ShoppingItemRow(
             Spacer(modifier = Modifier.height(3.dp))
 
             val ownerLabel = if (item.assignedMemberName.isNotBlank() && item.assignedMemberName != "Todos") {
-                "Para ${item.assignedMemberName} · Por ${item.addedByMemberName} · ${item.category}"
+                "Para ${item.assignedMemberName} · ${item.category}"
             } else {
-                "${item.addedByMemberName} · ${item.category}"
+                item.category
             }
             Text(
                 text = ownerLabel,

@@ -173,7 +173,7 @@
     },
     "MealPlan": {
       "title": "MealPlan",
-      "description": "Weekly meal planner slot for a day index (0..6) and meal type.",
+      "description": "Weekly meal planner slot for a day index (0..13) and meal type, with optional additional dish.",
       "type": "object",
       "properties": {
         "familyId": { "type": "string" },
@@ -181,6 +181,8 @@
         "mealType": { "type": "string", "enum": ["DESAYUNO", "COMIDA", "MERIENDA", "CENA"] },
         "dishName": { "type": "string" },
         "recipeId": { "type": "string" },
+        "additionalDishName": { "type": "string" },
+        "additionalRecipeId": { "type": "string" },
         "notes": { "type": "string" },
         "createdByUid": { "type": "string" },
         "memberUids": { "type": "array" },
@@ -291,7 +293,7 @@
     },
     "MacroIngredient": {
       "title": "MacroIngredient",
-      "description": "Ingredient nutritional macro profile per 100g for automatic meal gram calculation.",
+      "description": "Ingredient nutritional macro profile per custom reference quantity and unit (e.g., 100g, 75g, 1L, 1ud) for automatic meal calculation.",
       "type": "object",
       "properties": {
         "familyId": { "type": "string" },
@@ -300,6 +302,11 @@
         "carbsPer100g": { "type": "number" },
         "proteinPer100g": { "type": "number" },
         "fatPer100g": { "type": "number" },
+        "referenceQuantity": { "type": "number" },
+        "referenceUnit": { "type": "string" },
+        "carbsPerRef": { "type": "number" },
+        "proteinPerRef": { "type": "number" },
+        "fatPerRef": { "type": "number" },
         "createdByUid": { "type": "string" },
         "memberUids": { "type": "array" },
         "createdAt": { "type": "string", "format": "date-time" },

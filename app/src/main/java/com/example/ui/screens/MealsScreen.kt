@@ -134,6 +134,20 @@ fun MealsScreen(
     var editingSlot by remember { mutableStateOf<Pair<Int, MealType>?>(null) }
     var editingDishName by remember { mutableStateOf("") }
     var editingLinkedRecipeId by remember { mutableStateOf<String?>(null) }
+    var editingAdditionalDishName by remember { mutableStateOf("") }
+    var editingAdditionalRecipeId by remember { mutableStateOf<String?>(null) }
+    var showAdditionalDishField by remember { mutableStateOf(false) }
+    var recipePickerTargetAdditional by remember { mutableStateOf(false) }
+
+    val openSlotEditor: (Int, MealType, MealPlan?, Boolean) -> Unit = { dayIdx, mType, plan, focusAdditional ->
+        editingSlot = dayIdx to mType
+        editingDishName = plan?.dishName.orEmpty()
+        editingLinkedRecipeId = plan?.recipeId
+        editingAdditionalDishName = plan?.additionalDishName.orEmpty()
+        editingAdditionalRecipeId = plan?.additionalRecipeId
+        showAdditionalDishField = focusAdditional || !plan?.additionalDishName.isNullOrBlank()
+        recipePickerTargetAdditional = focusAdditional
+    }
 
     var recipeSearchQuery by remember { mutableStateOf("") }
     var selectedRecipeFilter by remember { mutableStateOf("Todas") }
@@ -447,10 +461,8 @@ fun MealsScreen(
                                     dayName = "${dayInfo.dayName} · ${dayInfo.dateLabel}",
                                     isToday = dayInfo.isToday,
                                     dayMeals = dayMeals,
-                                    onSlotClick = { mType, currentDish, linkedId ->
-                                        editingSlot = dayInfo.index to mType
-                                        editingDishName = currentDish
-                                        editingLinkedRecipeId = linkedId
+                                    onSlotClick = { mType, plan, focusAdditional ->
+                                        openSlotEditor(dayInfo.index, mType, plan, focusAdditional)
                                     }
                                 )
                             }
@@ -474,10 +486,8 @@ fun MealsScreen(
                                     dayName = "${dayInfo.dayName} · ${dayInfo.dateLabel}",
                                     isToday = dayInfo.isToday,
                                     dayMeals = dayMeals,
-                                    onSlotClick = { mType, currentDish, linkedId ->
-                                        editingSlot = dayInfo.index to mType
-                                        editingDishName = currentDish
-                                        editingLinkedRecipeId = linkedId
+                                    onSlotClick = { mType, plan, focusAdditional ->
+                                        openSlotEditor(dayInfo.index, mType, plan, focusAdditional)
                                     }
                                 )
                             }
@@ -537,23 +547,39 @@ fun MealsScreen(
 
                         items(MealType.plannerTypes) { mType ->
                             val existingPlan = dayMeals.firstOrNull { it.mealType == mType.name }
-                            val dish = existingPlan?.dishName ?: "Sin planificar"
+                            val dish = existingPlan?.dishName?.takeIf { it.isNotBlank() } ?: "Sin planificar"
+                            val additionalDish = existingPlan?.additionalDishName?.trim().orEmpty()
                             val linkedRecipe = existingPlan?.recipeId?.let { rid ->
                                 recipes.firstOrNull { it.id == rid }
-                            } ?: recipes.firstOrNull { it.title.equals(dish, ignoreCase = true) }
+                            } ?: if (dish != "Sin planificar") {
+                                recipes.firstOrNull { it.title.equals(dish, ignoreCase = true) }
+                            } else null
+                            val linkedAdditionalRecipe = if (additionalDish.isNotBlank()) {
+                                existingPlan?.additionalRecipeId?.let { rid ->
+                                    recipes.firstOrNull { it.id == rid }
+                                } ?: recipes.firstOrNull { it.title.equals(additionalDish, ignoreCase = true) }
+                            } else null
 
                             MealSlotCard(
                                 mealType = mType,
                                 dishName = dish,
+                                additionalDishName = additionalDish,
                                 hasLinkedRecipe = linkedRecipe != null,
+                                hasLinkedAdditionalRecipe = linkedAdditionalRecipe != null,
                                 onEdit = {
-                                    editingSlot = selectedDayInfo.index to mType
-                                    editingDishName = if (dish != "Sin planificar") dish else ""
-                                    editingLinkedRecipeId = existingPlan?.recipeId
+                                    openSlotEditor(selectedDayInfo.index, mType, existingPlan, false)
+                                },
+                                onEditAdditional = {
+                                    openSlotEditor(selectedDayInfo.index, mType, existingPlan, true)
                                 },
                                 onOpenRecipe = {
                                     if (linkedRecipe != null) {
                                         selectedRecipeForDetails = linkedRecipe
+                                    }
+                                },
+                                onOpenAdditionalRecipe = {
+                                    if (linkedAdditionalRecipe != null) {
+                                        selectedRecipeForDetails = linkedAdditionalRecipe
                                     }
                                 }
                             )
@@ -714,7 +740,7 @@ fun MealsScreen(
                             editingDishName = it
                             editingLinkedRecipeId = null
                         },
-                        label = { Text("Plato o menú") },
+                        label = { Text("Plato o menú principal") },
                         placeholder = { Text("ej: Lentejas, Salmón al horno...") },
                         singleLine = true,
                         trailingIcon = {
@@ -723,7 +749,7 @@ fun MealsScreen(
                                     editingDishName = ""
                                     editingLinkedRecipeId = null
                                 }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Vaciar")
+                                    Icon(Icons.Default.Clear, contentDescription = "Vaciar plato principal")
                                 }
                             }
                         },
@@ -732,6 +758,48 @@ fun MealsScreen(
                             .testTag("edit_meal_input")
                     )
 
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (showAdditionalDishField || editingAdditionalDishName.isNotBlank()) {
+                        OutlinedTextField(
+                            value = editingAdditionalDishName,
+                            onValueChange = {
+                                editingAdditionalDishName = it
+                                editingAdditionalRecipeId = null
+                            },
+                            label = { Text("Plato adicional (2ª opción)") },
+                            placeholder = { Text("ej: Otra comida si coméis distinto...") },
+                            singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = {
+                                    editingAdditionalDishName = ""
+                                    editingAdditionalRecipeId = null
+                                    showAdditionalDishField = false
+                                    recipePickerTargetAdditional = false
+                                }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Quitar plato adicional")
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("edit_additional_meal_input")
+                        )
+                    } else {
+                        OutlinedButton(
+                            onClick = {
+                                showAdditionalDishField = true
+                                recipePickerTargetAdditional = true
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("add_additional_meal_btn")
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Añadir adicional (2ª opción)")
+                        }
+                    }
+
                     if (recipes.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
@@ -739,21 +807,55 @@ fun MealsScreen(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (showAdditionalDishField || editingAdditionalDishName.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf(false to "Principal", true to "Adicional").forEach { (isAdditionalTarget, label) ->
+                                    val selected = recipePickerTargetAdditional == isAdditionalTarget
+                                    Surface(
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceVariant,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .clickable { recipePickerTargetAdditional = isAdditionalTarget }
+                                    ) {
+                                        Text(
+                                            text = "Para: $label",
+                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                                            ),
+                                            color = if (selected) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             recipes.forEach { recipe ->
-                                val isPicked = editingLinkedRecipeId == recipe.id || editingDishName.equals(recipe.title, ignoreCase = true)
+                                val isPicked = if (recipePickerTargetAdditional) {
+                                    editingAdditionalRecipeId == recipe.id || editingAdditionalDishName.equals(recipe.title, ignoreCase = true)
+                                } else {
+                                    editingLinkedRecipeId == recipe.id || editingDishName.equals(recipe.title, ignoreCase = true)
+                                }
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
                                     color = if (isPicked) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(10.dp))
                                         .clickable {
-                                            editingDishName = recipe.title
-                                            editingLinkedRecipeId = recipe.id
+                                            if (recipePickerTargetAdditional) {
+                                                showAdditionalDishField = true
+                                                editingAdditionalDishName = recipe.title
+                                                editingAdditionalRecipeId = recipe.id
+                                            } else {
+                                                editingDishName = recipe.title
+                                                editingLinkedRecipeId = recipe.id
+                                            }
                                         }
                                 ) {
                                     Text(
@@ -769,19 +871,30 @@ fun MealsScreen(
                 }
             },
             confirmButton = {
+                val bothBlank = editingDishName.isBlank() && editingAdditionalDishName.isBlank()
                 Button(
                     onClick = {
-                        viewModel.updateMealPlanSlot(dayIdx, mType, editingDishName, editingLinkedRecipeId)
-                        feedbackMessage = if (editingDishName.isBlank()) {
-                            "${mType.displayName} ($dayTitle) vaciado"
-                        } else {
-                            "${mType.displayName} del $dayTitle: $editingDishName"
+                        val cleanMain = editingDishName.trim()
+                        val cleanExtra = editingAdditionalDishName.trim()
+                        viewModel.updateMealPlanSlot(
+                            dayIndex = dayIdx,
+                            mealType = mType,
+                            dishName = cleanMain,
+                            recipeId = if (cleanMain.isNotBlank()) editingLinkedRecipeId else null,
+                            additionalDishName = cleanExtra,
+                            additionalRecipeId = if (cleanExtra.isNotBlank()) editingAdditionalRecipeId else null
+                        )
+                        feedbackMessage = when {
+                            cleanMain.isBlank() && cleanExtra.isBlank() -> "${mType.displayName} ($dayTitle) vaciado"
+                            cleanMain.isNotBlank() && cleanExtra.isNotBlank() -> "${mType.displayName} del $dayTitle: $cleanMain + $cleanExtra"
+                            cleanMain.isNotBlank() -> "${mType.displayName} del $dayTitle: $cleanMain"
+                            else -> "${mType.displayName} ($dayTitle) adicional: $cleanExtra"
                         }
                         editingSlot = null
                     },
                     modifier = Modifier.testTag("save_meal_button")
                 ) {
-                    Text(if (editingDishName.isBlank()) "Vaciar" else "Guardar")
+                    Text(if (bothBlank) "Vaciar" else "Guardar")
                 }
             },
             dismissButton = {
@@ -994,6 +1107,7 @@ fun MealsScreen(
         var selectedWeek by remember { mutableIntStateOf(todayIndex / 7) }
         var targetDayInWeek by remember { mutableIntStateOf(todayIndex % 7) }
         var targetMealType by remember { mutableStateOf(MealType.COMIDA) }
+        var assignAsAdditional by remember { mutableStateOf(false) }
         val targetDayIdx = selectedWeek * 7 + targetDayInWeek
         val weekDays = plannerDays.filter { it.weekIndex == selectedWeek }
 
@@ -1076,6 +1190,31 @@ fun MealsScreen(
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Hueco", style = MaterialTheme.typography.labelMedium)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(false to "Plato principal", true to "Plato adicional").forEach { (isExtra, label) ->
+                            val isSelected = assignAsAdditional == isExtra
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { assignAsAdditional = isExtra }
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    ),
+                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -1083,8 +1222,30 @@ fun MealsScreen(
                 val dayDesc = if (chosenDay != null) "${chosenDay.dayName} ${chosenDay.dateLabel}" else "día"
                 Button(
                     onClick = {
-                        viewModel.updateMealPlanSlot(targetDayIdx, targetMealType, r.title, r.id)
-                        feedbackMessage = "'${r.title}' añadido al $dayDesc (${targetMealType.displayName})"
+                        val existingPlan = mealPlans.firstOrNull {
+                            it.dayOfWeekIndex == targetDayIdx && it.mealType == targetMealType.name
+                        }
+                        if (assignAsAdditional) {
+                            viewModel.updateMealPlanSlot(
+                                dayIndex = targetDayIdx,
+                                mealType = targetMealType,
+                                dishName = existingPlan?.dishName.orEmpty(),
+                                recipeId = existingPlan?.recipeId,
+                                additionalDishName = r.title,
+                                additionalRecipeId = r.id
+                            )
+                            feedbackMessage = "'${r.title}' añadido como adicional al $dayDesc (${targetMealType.displayName})"
+                        } else {
+                            viewModel.updateMealPlanSlot(
+                                dayIndex = targetDayIdx,
+                                mealType = targetMealType,
+                                dishName = r.title,
+                                recipeId = r.id,
+                                additionalDishName = existingPlan?.additionalDishName.orEmpty(),
+                                additionalRecipeId = existingPlan?.additionalRecipeId
+                            )
+                            feedbackMessage = "'${r.title}' añadido al $dayDesc (${targetMealType.displayName})"
+                        }
                         recipeToAssignToPlan = null
                     }
                 ) {
@@ -1101,7 +1262,7 @@ fun MealsScreen(
 
     if (recipeToTransfer != null) {
         val (r, chosenIngredients) = recipeToTransfer!!
-        var chosenSupermarket by remember { mutableStateOf(Supermarket.MERCADONA) }
+        var chosenSupermarket by remember { mutableStateOf(Supermarket.CARREFOUR) }
 
         AlertDialog(
             onDismissRequest = { recipeToTransfer = null },
@@ -1168,7 +1329,7 @@ fun WeeklyDayCard(
     dayName: String,
     isToday: Boolean,
     dayMeals: List<MealPlan>,
-    onSlotClick: (MealType, String, String?) -> Unit
+    onSlotClick: (MealType, MealPlan?, Boolean) -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1208,7 +1369,9 @@ fun WeeklyDayCard(
                 }
 
                 val plannerTypeNames = MealType.plannerTypes.map { it.name }
-                val plannedCount = dayMeals.count { it.dishName.isNotBlank() && it.mealType in plannerTypeNames }
+                val plannedCount = dayMeals.count {
+                    (it.dishName.isNotBlank() || it.additionalDishName.isNotBlank()) && it.mealType in plannerTypeNames
+                }
                 Text(
                     text = "$plannedCount / ${MealType.plannerTypes.size}",
                     style = MaterialTheme.typography.labelMedium,
@@ -1222,37 +1385,113 @@ fun WeeklyDayCard(
             MealType.plannerTypes.forEachIndexed { idx, mType ->
                 val slot = dayMeals.firstOrNull { it.mealType == mType.name }
                 val dish = slot?.dishName?.takeIf { it.isNotBlank() }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { onSlotClick(mType, dish ?: "", slot?.recipeId) }
-                        .padding(vertical = 9.dp, horizontal = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = mType.displayName,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.width(88.dp)
-                    )
+                val additionalDish = slot?.additionalDishName?.takeIf { it.isNotBlank() }
 
-                    Text(
-                        text = dish ?: "Añadir ${mType.displayName.lowercase()}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (dish != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onSlotClick(mType, slot, false) }
+                            .padding(vertical = 8.dp, horizontal = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = mType.displayName,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.width(88.dp)
+                        )
 
-                    Icon(
-                        imageVector = Icons.Outlined.Edit,
-                        contentDescription = "Editar ${mType.displayName}",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(15.dp)
-                    )
+                        Text(
+                            text = dish ?: "Añadir ${mType.displayName.lowercase()}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (dish != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = "Editar ${mType.displayName}",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 88.dp, bottom = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (additionalDish != null) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onSlotClick(mType, slot, true) }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Adicional: ",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                    Text(
+                                        text = additionalDish,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.Outlined.Edit,
+                                        contentDescription = "Editar adicional de ${mType.displayName}",
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                }
+                            }
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color.Transparent,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable { onSlotClick(mType, slot, true) }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.secondary,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Añadir adicional",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
+
                 if (idx < MealType.plannerTypes.lastIndex) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
                 }
@@ -1265,9 +1504,13 @@ fun WeeklyDayCard(
 fun MealSlotCard(
     mealType: MealType,
     dishName: String,
+    additionalDishName: String = "",
     hasLinkedRecipe: Boolean = false,
+    hasLinkedAdditionalRecipe: Boolean = false,
     onEdit: () -> Unit,
-    onOpenRecipe: () -> Unit = {}
+    onEditAdditional: () -> Unit = onEdit,
+    onOpenRecipe: () -> Unit = {},
+    onOpenAdditionalRecipe: () -> Unit = {}
 ) {
     Surface(
         modifier = Modifier
@@ -1278,54 +1521,138 @@ fun MealSlotCard(
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(16.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = mealType.displayName.uppercase(),
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        letterSpacing = 1.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = dishName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (dishName != "Sin planificar") MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (hasLinkedRecipe) {
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable(onClick = onOpenRecipe)
-                    ) {
-                        Text(
-                            text = "Ver receta",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = mealType.displayName.uppercase(),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            letterSpacing = 1.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = dishName,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (dishName != "Sin planificar") MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (hasLinkedRecipe) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable(onClick = onOpenRecipe)
+                        ) {
+                            Text(
+                                text = "Ver receta",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
                     }
+                }
+
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        imageVector = Icons.Outlined.Edit,
+                        contentDescription = "Editar plato",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
 
-            IconButton(onClick = onEdit) {
-                Icon(
-                    imageVector = Icons.Outlined.Edit,
-                    contentDescription = "Editar plato",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (additionalDishName.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onEditAdditional)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "ADICIONAL",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    letterSpacing = 0.8.sp,
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = additionalDishName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            if (hasLinkedAdditionalRecipe) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable(onClick = onOpenAdditionalRecipe)
+                                ) {
+                                    Text(
+                                        text = "Ver receta",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = "Editar plato adicional",
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            } else {
+                OutlinedButton(
+                    onClick = onEditAdditional,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    modifier = Modifier.height(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Añadir adicional",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
             }
         }
     }

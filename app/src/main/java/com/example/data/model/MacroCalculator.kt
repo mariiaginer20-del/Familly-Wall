@@ -1,5 +1,6 @@
 package com.example.data.model
 
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -41,13 +42,111 @@ fun MacroTargets.targetForMeal(slot: MacroMealSlot): MacroTriple = when (slot) {
     MacroMealSlot.CENA -> MacroTriple(dinnerCarbsG, dinnerProteinG, dinnerFatG)
 }
 
+object MacroUnits {
+    val quickUnits: List<String> = listOf("g", "kg", "ml", "L", "ud")
+
+    data class ReferencePreset(
+        val label: String,
+        val quantity: Double,
+        val unit: String
+    )
+
+    val quickPresets: List<ReferencePreset> = listOf(
+        ReferencePreset("100 g", 100.0, "g"),
+        ReferencePreset("100 ml", 100.0, "ml"),
+        ReferencePreset("1 L", 1.0, "L"),
+        ReferencePreset("1 ud", 1.0, "ud")
+    )
+
+    fun cleanUnit(raw: String): String = raw.trim().ifBlank { "g" }.take(24)
+
+    fun formatQuantityNumber(value: Double): String {
+        val rounded = (value * 100.0).roundToInt() / 100.0
+        return when {
+            abs(rounded - rounded.roundToInt()) < 0.005 -> rounded.roundToInt().toString()
+            abs(rounded * 10.0 - (rounded * 10.0).roundToInt()) < 0.05 ->
+                String.format(java.util.Locale.US, "%.1f", rounded)
+            else -> String.format(java.util.Locale.US, "%.2f", rounded)
+        }
+    }
+
+    /**
+     * Returns equivalent grams or milliliters if [unit] is a standard metric weight/volume unit
+     * (`g`, `kg`, `ml`, `L`), or null for count/custom units (`ud`, `rebanada`, etc.).
+     */
+    fun toBaseMetricAmountOrNull(quantity: Double, unit: String): Double? {
+        if (quantity <= 0.0) return null
+        return when (unit.trim().lowercase()) {
+            "g", "gr", "gramo", "gramos" -> quantity
+            "kg", "kilo", "kilos", "kilogramo", "kilogramos" -> quantity * 1000.0
+            "ml", "mililitro", "mililitros" -> quantity
+            "l", "lt", "litro", "litros" -> quantity * 1000.0
+            else -> null
+        }
+    }
+
+    fun isMassOrVolumeMetric(unit: String): Boolean = toBaseMetricAmountOrNull(1.0, unit) != null
+
+    /**
+     * Normalizes macros from `[referenceQuantity] [referenceUnit]` to per-100g/ml for legacy storage
+     * when metric, or keeps per-reference macros directly when count/custom unit.
+     */
+    fun toLegacyPer100g(
+        referenceQuantity: Double,
+        referenceUnit: String,
+        carbsPerRef: Double,
+        proteinPerRef: Double,
+        fatPerRef: Double
+    ): MacroTriple {
+        val base = toBaseMetricAmountOrNull(referenceQuantity, referenceUnit)
+        return if (base != null && base > 0.0) {
+            val scale = 100.0 / base
+            MacroTriple(
+                carbsG = (carbsPerRef * scale).coerceIn(0.0, 5000.0),
+                proteinG = (proteinPerRef * scale).coerceIn(0.0, 5000.0),
+                fatG = (fatPerRef * scale).coerceIn(0.0, 5000.0)
+            )
+        } else {
+            MacroTriple(
+                carbsG = carbsPerRef.coerceIn(0.0, 5000.0),
+                proteinG = proteinPerRef.coerceIn(0.0, 5000.0),
+                fatG = fatPerRef.coerceIn(0.0, 5000.0)
+            )
+        }
+    }
+}
+
+val MacroIngredient.effectiveRefQuantity: Double
+    get() = if (referenceQuantity > 0.0) referenceQuantity else 100.0
+
+val MacroIngredient.effectiveRefUnit: String
+    get() = MacroUnits.cleanUnit(referenceUnit)
+
+val MacroIngredient.effectiveCarbsPerRef: Double
+    get() = (carbsPerRef ?: carbsPer100g).coerceAtLeast(0.0)
+
+val MacroIngredient.effectiveProteinPerRef: Double
+    get() = (proteinPerRef ?: proteinPer100g).coerceAtLeast(0.0)
+
+val MacroIngredient.effectiveFatPerRef: Double
+    get() = (fatPerRef ?: fatPer100g).coerceAtLeast(0.0)
+
+val MacroIngredient.effectiveRefKcal: Int
+    get() = (effectiveCarbsPerRef * 4.0 + effectiveProteinPerRef * 4.0 + effectiveFatPerRef * 9.0).roundToInt()
+
+fun MacroIngredient.formatReferenceLabel(): String {
+    return "${MacroUnits.formatQuantityNumber(effectiveRefQuantity)} $effectiveRefUnit"
+}
+
 data class DefaultMacroIngredientTemplate(
     val idSuffix: String,
     val name: String,
     val emoji: String,
     val carbsPer100g: Double,
     val proteinPer100g: Double,
-    val fatPer100g: Double
+    val fatPer100g: Double,
+    val referenceQuantity: Double = 100.0,
+    val referenceUnit: String = "g"
 )
 
 object DefaultMacroIngredients {
@@ -76,7 +175,10 @@ object DefaultMacroIngredients {
 
 data class MacroIngredientPortion(
     val ingredient: MacroIngredient,
-    val grams: Int,
+    val amount: Double,
+    val unit: String,
+    val formattedQuantity: String,
+    val formattedAmount: String,
     val carbsG: Double,
     val proteinG: Double,
     val fatG: Double,
@@ -93,9 +195,9 @@ data class MacroCalculationResult(
 object MacroSolver {
 
     fun dominantMacro(ingredient: MacroIngredient, target: MacroTriple): MacroDominance {
-        val cScore = ingredient.carbsPer100g / max(target.carbsG, 10.0)
-        val pScore = ingredient.proteinPer100g / max(target.proteinG, 10.0)
-        val fScore = ingredient.fatPer100g / max(target.fatG, 10.0)
+        val cScore = ingredient.effectiveCarbsPerRef / max(target.carbsG, 10.0)
+        val pScore = ingredient.effectiveProteinPerRef / max(target.proteinG, 10.0)
+        val fScore = ingredient.effectiveFatPerRef / max(target.fatG, 10.0)
         return when {
             pScore >= cScore && pScore >= fScore -> MacroDominance.PROTEIN
             fScore >= cScore && fScore >= pScore -> MacroDominance.FAT
@@ -104,23 +206,38 @@ object MacroSolver {
     }
 
     fun hasMacro(ingredient: MacroIngredient, macro: MacroDominance): Boolean {
-        val cKcal = ingredient.carbsPer100g * 4.0
-        val pKcal = ingredient.proteinPer100g * 4.0
-        val fKcal = ingredient.fatPer100g * 9.0
+        val cRef = ingredient.effectiveCarbsPerRef
+        val pRef = ingredient.effectiveProteinPerRef
+        val fRef = ingredient.effectiveFatPerRef
+        val cKcal = cRef * 4.0
+        val pKcal = pRef * 4.0
+        val fKcal = fRef * 9.0
         val totalKcal = cKcal + pKcal + fKcal
         if (totalKcal <= 0.0) return false
+
+        val normalized = MacroUnits.toLegacyPer100g(
+            referenceQuantity = ingredient.effectiveRefQuantity,
+            referenceUnit = ingredient.effectiveRefUnit,
+            carbsPerRef = cRef,
+            proteinPerRef = pRef,
+            fatPerRef = fRef
+        )
+        val isMetric = MacroUnits.isMassOrVolumeMetric(ingredient.effectiveRefUnit)
         return when (macro) {
-            MacroDominance.CARB -> ingredient.carbsPer100g >= 10.0 || (cKcal / totalKcal) >= 0.20
-            MacroDominance.PROTEIN -> ingredient.proteinPer100g >= 8.0 || (pKcal / totalKcal) >= 0.18
-            MacroDominance.FAT -> ingredient.fatPer100g >= 5.0 || (fKcal / totalKcal) >= 0.20
+            MacroDominance.CARB ->
+                (isMetric && normalized.carbsG >= 10.0) || (!isMetric && cRef >= 6.0) || (cKcal / totalKcal) >= 0.20
+            MacroDominance.PROTEIN ->
+                (isMetric && normalized.proteinG >= 8.0) || (!isMetric && pRef >= 5.0) || (pKcal / totalKcal) >= 0.18
+            MacroDominance.FAT ->
+                (isMetric && normalized.fatG >= 5.0) || (!isMetric && fRef >= 4.0) || (fKcal / totalKcal) >= 0.20
         }
     }
 
-    private fun macroValueFor(ingredient: MacroIngredient, dominance: MacroDominance): Double =
+    private fun macroValuePerRef(ingredient: MacroIngredient, dominance: MacroDominance): Double =
         when (dominance) {
-            MacroDominance.CARB -> ingredient.carbsPer100g
-            MacroDominance.PROTEIN -> ingredient.proteinPer100g
-            MacroDominance.FAT -> ingredient.fatPer100g
+            MacroDominance.CARB -> ingredient.effectiveCarbsPerRef
+            MacroDominance.PROTEIN -> ingredient.effectiveProteinPerRef
+            MacroDominance.FAT -> ingredient.effectiveFatPerRef
         }
 
     private class LinearRow(
@@ -128,10 +245,98 @@ object MacroSolver {
         val rhs: Double
     )
 
+    private data class RoundedPortionAmount(
+        val displayAmount: Double,
+        val displayUnit: String,
+        val formattedQuantity: String,
+        val refFactor: Double
+    )
+
+    private fun roundPortionAmount(rawRefPortions: Double, ingredient: MacroIngredient): RoundedPortionAmount {
+        val refQty = ingredient.effectiveRefQuantity
+        val refUnit = ingredient.effectiveRefUnit
+        val rawAmount = (rawRefPortions * refQty).coerceAtLeast(0.0)
+        val unitLower = refUnit.lowercase()
+
+        return when (unitLower) {
+            "g", "gr", "gramo", "gramos" -> {
+                val g = rawAmount.roundToInt().coerceAtLeast(0)
+                val unitOut = if (unitLower == "gr") "g" else refUnit
+                RoundedPortionAmount(
+                    displayAmount = g.toDouble(),
+                    displayUnit = unitOut,
+                    formattedQuantity = g.toString(),
+                    refFactor = g / refQty
+                )
+            }
+            "kg", "kilo", "kilos", "kilogramo", "kilogramos" -> {
+                if (rawAmount < 1.0) {
+                    val g = (rawAmount * 1000.0).roundToInt().coerceAtLeast(0)
+                    RoundedPortionAmount(
+                        displayAmount = g.toDouble(),
+                        displayUnit = "g",
+                        formattedQuantity = g.toString(),
+                        refFactor = (g / 1000.0) / refQty
+                    )
+                } else {
+                    val kg = (rawAmount * 100.0).roundToInt() / 100.0
+                    RoundedPortionAmount(
+                        displayAmount = kg,
+                        displayUnit = "kg",
+                        formattedQuantity = MacroUnits.formatQuantityNumber(kg),
+                        refFactor = kg / refQty
+                    )
+                }
+            }
+            "ml", "mililitro", "mililitros" -> {
+                val ml = rawAmount.roundToInt().coerceAtLeast(0)
+                RoundedPortionAmount(
+                    displayAmount = ml.toDouble(),
+                    displayUnit = "ml",
+                    formattedQuantity = ml.toString(),
+                    refFactor = ml / refQty
+                )
+            }
+            "l", "lt", "litro", "litros" -> {
+                if (rawAmount < 1.0) {
+                    val ml = (rawAmount * 1000.0).roundToInt().coerceAtLeast(0)
+                    RoundedPortionAmount(
+                        displayAmount = ml.toDouble(),
+                        displayUnit = "ml",
+                        formattedQuantity = ml.toString(),
+                        refFactor = (ml / 1000.0) / refQty
+                    )
+                } else {
+                    val l = (rawAmount * 100.0).roundToInt() / 100.0
+                    RoundedPortionAmount(
+                        displayAmount = l,
+                        displayUnit = "L",
+                        formattedQuantity = MacroUnits.formatQuantityNumber(l),
+                        refFactor = l / refQty
+                    )
+                }
+            }
+            else -> {
+                // Count / custom units (e.g., "ud", "rebanada", "cazo"): step 0.5 when >= 0.25, else 0.1
+                val rounded = when {
+                    rawAmount < 0.04 -> 0.0
+                    rawAmount < 0.25 -> ((rawAmount * 10.0).roundToInt() / 10.0).coerceAtLeast(0.1)
+                    else -> (rawAmount * 2.0).roundToInt() / 2.0
+                }
+                RoundedPortionAmount(
+                    displayAmount = rounded,
+                    displayUnit = refUnit,
+                    formattedQuantity = MacroUnits.formatQuantityNumber(rounded),
+                    refFactor = rounded / refQty
+                )
+            }
+        }
+    }
+
     /**
-     * Solves non-negative portions (in 100g units) minimizing normalized macro errors
-     * across multi-nutrient foods while balancing contributions (~50%/50%) among
-     * ingredients that share the same dominant macro.
+     * Solves non-negative portions in a reference-unit-invariant basis (each optimization variable u[i]
+     * corresponds to ~100 kcal of ingredient i), minimizing normalized macro errors across multi-nutrient
+     * foods while balancing contributions (~50%/50%) among ingredients that share the same dominant macro.
      */
     fun calculate(
         selectedIngredients: List<MacroIngredient>,
@@ -143,24 +348,34 @@ object MacroSolver {
 
         val n = selectedIngredients.size
         val dominances = selectedIngredients.map { dominantMacro(it, target) }
+
+        // Reference-unit invariance: 1 optimization unit u[i] represents ~100 kcal of ingredient i
+        val refFactorPerU = DoubleArray(n) { i ->
+            val ing = selectedIngredients[i]
+            val kcalPerRef = ing.effectiveCarbsPerRef * 4.0 +
+                ing.effectiveProteinPerRef * 4.0 +
+                ing.effectiveFatPerRef * 9.0
+            if (kcalPerRef > 1.0) 100.0 / kcalPerRef else 1.0
+        }
+
         val rows = mutableListOf<LinearRow>()
 
         // 1. Macro target rows (normalized to target scale so Carbs/Protein/Fat balance cleanly)
         val cScale = 1.0 / max(target.carbsG, 12.0)
         rows += LinearRow(
-            coeffs = DoubleArray(n) { i -> selectedIngredients[i].carbsPer100g * cScale },
+            coeffs = DoubleArray(n) { i -> selectedIngredients[i].effectiveCarbsPerRef * refFactorPerU[i] * cScale },
             rhs = target.carbsG * cScale
         )
 
         val pScale = 1.0 / max(target.proteinG, 12.0)
         rows += LinearRow(
-            coeffs = DoubleArray(n) { i -> selectedIngredients[i].proteinPer100g * pScale },
+            coeffs = DoubleArray(n) { i -> selectedIngredients[i].effectiveProteinPerRef * refFactorPerU[i] * pScale },
             rhs = target.proteinG * pScale
         )
 
         val fScale = 1.0 / max(target.fatG, 10.0)
         rows += LinearRow(
-            coeffs = DoubleArray(n) { i -> selectedIngredients[i].fatPer100g * fScale },
+            coeffs = DoubleArray(n) { i -> selectedIngredients[i].effectiveFatPerRef * refFactorPerU[i] * fScale },
             rhs = target.fatG * fScale
         )
 
@@ -178,8 +393,8 @@ object MacroSolver {
                 for (bPos in (aPos + 1) until indices.size) {
                     val i = indices[aPos]
                     val j = indices[bPos]
-                    val mI = macroValueFor(selectedIngredients[i], dom)
-                    val mJ = macroValueFor(selectedIngredients[j], dom)
+                    val mI = macroValuePerRef(selectedIngredients[i], dom) * refFactorPerU[i]
+                    val mJ = macroValuePerRef(selectedIngredients[j], dom) * refFactorPerU[j]
                     if (mI > 0.0 || mJ > 0.0) {
                         val rowCoeffs = DoubleArray(n)
                         rowCoeffs[i] = pairWeight * mI
@@ -197,12 +412,12 @@ object MacroSolver {
             rows += LinearRow(reg, 0.0)
         }
 
-        // 4. Exact coordinate descent over w[i] >= 0 (100g units)
-        val w = DoubleArray(n) { 0.5 }
+        // 4. Exact coordinate descent over u[i] >= 0 (100-kcal-normalized units)
+        val u = DoubleArray(n) { 1.0 }
         val residuals = DoubleArray(rows.size) { rIdx ->
             val row = rows[rIdx]
             var s = -row.rhs
-            for (k in 0 until n) s += row.coeffs[k] * w[k]
+            for (k in 0 until n) s += row.coeffs[k] * u[k]
             s
         }
 
@@ -218,11 +433,11 @@ object MacroSolver {
                     }
                 }
                 if (a > 1e-12) {
-                    val oldWi = w[i]
-                    val newWi = (oldWi - g / a).coerceIn(0.0, 20.0)
-                    val delta = newWi - oldWi
-                    if (kotlin.math.abs(delta) > 1e-9) {
-                        w[i] = newWi
+                    val oldUi = u[i]
+                    val newUi = (oldUi - g / a).coerceIn(0.0, 40.0)
+                    val delta = newUi - oldUi
+                    if (abs(delta) > 1e-9) {
+                        u[i] = newUi
                         for (rIdx in rows.indices) {
                             val coeff = rows[rIdx].coeffs[i]
                             if (coeff != 0.0) {
@@ -234,10 +449,13 @@ object MacroSolver {
             }
         }
 
-        // Convert 100g units to rounded grams and compute actual macros & group percentages
-        val gramsList = w.map { (it * 100.0).roundToInt().coerceAtLeast(0) }
+        // Convert solved reference portions to readable kitchen amounts & compute exact achieved macros
+        val roundedList = selectedIngredients.mapIndexed { idx, ing ->
+            roundPortionAmount(u[idx] * refFactorPerU[idx], ing)
+        }
+
         val rawContributions = selectedIngredients.indices.map { idx ->
-            macroValueFor(selectedIngredients[idx], dominances[idx]) * (gramsList[idx] / 100.0)
+            macroValuePerRef(selectedIngredients[idx], dominances[idx]) * roundedList[idx].refFactor
         }
         val groupTotals = mutableMapOf<MacroDominance, Double>()
         selectedIngredients.indices.forEach { idx ->
@@ -250,11 +468,11 @@ object MacroSolver {
         var totalF = 0.0
 
         val portions = selectedIngredients.mapIndexed { idx, ing ->
-            val g = gramsList[idx]
-            val factor = g / 100.0
-            val c = ing.carbsPer100g * factor
-            val p = ing.proteinPer100g * factor
-            val f = ing.fatPer100g * factor
+            val rounded = roundedList[idx]
+            val factor = rounded.refFactor
+            val c = ing.effectiveCarbsPerRef * factor
+            val p = ing.effectiveProteinPerRef * factor
+            val f = ing.effectiveFatPerRef * factor
             totalC += c
             totalP += p
             totalF += f
@@ -263,7 +481,10 @@ object MacroSolver {
             val sharePct = if (gTotal > 0.01) ((rawContributions[idx] / gTotal) * 100.0).roundToInt() else 0
             MacroIngredientPortion(
                 ingredient = ing,
-                grams = g,
+                amount = rounded.displayAmount,
+                unit = rounded.displayUnit,
+                formattedQuantity = rounded.formattedQuantity,
+                formattedAmount = "${rounded.formattedQuantity} ${rounded.displayUnit}",
                 carbsG = c,
                 proteinG = p,
                 fatG = f,

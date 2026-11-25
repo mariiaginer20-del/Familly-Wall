@@ -89,7 +89,7 @@ fun AddShoppingItemDialog(
     var unit by remember(initialItem) { mutableStateOf(initialItem?.unit ?: "ud") }
     var selectedSupermarket by remember(initialItem) {
         mutableStateOf(
-            initialItem?.let { Supermarket.fromString(it.supermarket) } ?: Supermarket.MERCADONA
+            initialItem?.let { Supermarket.fromString(it.supermarket) } ?: Supermarket.CARREFOUR
         )
     }
     var selectedPriority by remember(initialItem) {
@@ -547,39 +547,6 @@ fun AddShoppingItemDialog(
                                 color = if (isSelected) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             )
-                        }
-                    }
-                }
-
-                if (members.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Añadido por:",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        members.forEach { m ->
-                            val isSelected = addedBy == m.name
-                            Surface(
-                                shape = CircleShape,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier
-                                    .clip(CircleShape)
-                                    .clickable { addedBy = m.name }
-                            ) {
-                                Text(
-                                    text = "${m.avatarEmoji} ${m.name}",
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                )
-                            }
                         }
                     }
                 }

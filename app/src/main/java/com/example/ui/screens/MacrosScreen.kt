@@ -65,9 +65,15 @@ import com.example.data.model.MacroIngredient
 import com.example.data.model.MacroMealSlot
 import com.example.data.model.MacroSolver
 import com.example.data.model.MacroTriple
+import com.example.data.model.MacroUnits
 import com.example.data.model.RecipeFormatters
 import com.example.data.model.RecipeIngredient
 import com.example.data.model.dailyTriple
+import com.example.data.model.effectiveCarbsPerRef
+import com.example.data.model.effectiveFatPerRef
+import com.example.data.model.effectiveProteinPerRef
+import com.example.data.model.effectiveRefKcal
+import com.example.data.model.formatReferenceLabel
 import com.example.data.model.targetForMeal
 import com.example.ui.FamilyWallViewModel
 import com.example.ui.RecipeDraft
@@ -510,7 +516,7 @@ fun MacrosScreen(
                                                         color = MaterialTheme.colorScheme.onSurface
                                                     )
                                                     Text(
-                                                        text = "100g: ${formatGramsShort(ing.carbsPer100g)} HC · ${formatGramsShort(ing.proteinPer100g)} P · ${formatGramsShort(ing.fatPer100g)} G",
+                                                        text = "${ing.formatReferenceLabel()}: ${formatGramsShort(ing.effectiveCarbsPerRef)} HC · ${formatGramsShort(ing.effectiveProteinPerRef)} P · ${formatGramsShort(ing.effectiveFatPerRef)} G",
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
@@ -645,7 +651,7 @@ fun MacrosScreen(
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = if (selectedIngredients.isEmpty()) "Añade ingredientes arriba para calcular los gramos"
+                                        text = if (selectedIngredients.isEmpty()) "Añade ingredientes arriba para calcular las cantidades"
                                         else "${calculationResult.achieved.kcal} kcal / ${mealTarget.kcal} kcal objetivo",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -710,7 +716,7 @@ fun MacrosScreen(
                                                 color = domColor.copy(alpha = 0.14f)
                                             ) {
                                                 Text(
-                                                    text = "${portion.grams} g",
+                                                    text = portion.formattedAmount,
                                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                                     color = domColor,
                                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
@@ -738,12 +744,12 @@ fun MacrosScreen(
 
                                 Button(
                                     onClick = {
-                                        val activePortions = calculationResult.portions.filter { it.grams > 0 }
+                                        val activePortions = calculationResult.portions.filter { it.amount > 0.0 }
                                         val ingRows = activePortions.map { p ->
                                             RecipeIngredient(
                                                 name = p.ingredient.name,
-                                                quantity = p.grams.toString(),
-                                                unit = "g"
+                                                quantity = p.formattedQuantity,
+                                                unit = p.unit
                                             )
                                         }
                                         val topNames = activePortions.take(3).joinToString(", ") {
@@ -751,7 +757,7 @@ fun MacrosScreen(
                                         }
                                         val title = "${selectedMealSlot.displayName}: ${topNames.ifBlank { "Plato macros" }}"
                                         val ach = calculationResult.achieved
-                                        val summaryStep = "Pesar los ingredientes exactos y cocinar al gusto. Macros totales: ${ach.carbsG.roundToInt()}g hidratos, ${ach.proteinG.roundToInt()}g proteínas y ${ach.fatG.roundToInt()}g grasas (~${ach.kcal} kcal)."
+                                        val summaryStep = "Preparar las cantidades exactas y cocinar al gusto. Macros totales: ${ach.carbsG.roundToInt()}g hidratos, ${ach.proteinG.roundToInt()}g proteínas y ${ach.fatG.roundToInt()}g grasas (~${ach.kcal} kcal)."
                                         val draft = RecipeDraft(
                                             title = title.take(120),
                                             category = selectedMealSlot.defaultRecipeCategory,
@@ -763,7 +769,7 @@ fun MacrosScreen(
                                         )
                                         viewModel.openSaveMacroRecipeDialog(draft)
                                     },
-                                    enabled = calculationResult.portions.any { it.grams > 0 },
+                                    enabled = calculationResult.portions.any { it.amount > 0.0 },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(48.dp)
@@ -943,7 +949,7 @@ fun MacrosScreen(
                     }
                 } else {
                     items(libraryFilteredIngredients, key = { it.id }) { ing ->
-                        val kcal100 = (ing.carbsPer100g * 4.0 + ing.proteinPer100g * 4.0 + ing.fatPer100g * 9.0).roundToInt()
+                        val kcalRef = ing.effectiveRefKcal
                         val meaningfulMacros = MacroDominance.entries.filter { MacroSolver.hasMacro(ing, it) }
 
                         Surface(
@@ -998,7 +1004,7 @@ fun MacrosScreen(
                                         }
                                     }
                                     Text(
-                                        text = "100g: ${formatGramsShort(ing.carbsPer100g)} HC · ${formatGramsShort(ing.proteinPer100g)} P · ${formatGramsShort(ing.fatPer100g)} G · $kcal100 kcal",
+                                        text = "${ing.formatReferenceLabel()}: ${formatGramsShort(ing.effectiveCarbsPerRef)} HC · ${formatGramsShort(ing.effectiveProteinPerRef)} P · ${formatGramsShort(ing.effectiveFatPerRef)} G · $kcalRef kcal",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1058,18 +1064,32 @@ fun MacrosScreen(
             initialIngredient = editingIngredient,
             initialName = newIngredientPrefillName,
             onDismiss = { showIngredientDialog = false },
-            onSave = { name, emoji, carbs, protein, fat ->
+            onSave = { name, emoji, refQty, refUnit, carbsPerRef, proteinPerRef, fatPerRef ->
                 val editing = editingIngredient
                 if (editing == null) {
-                    viewModel.addMacroIngredient(name, emoji, carbs, protein, fat)
+                    viewModel.addMacroIngredient(
+                        name = name,
+                        emoji = emoji,
+                        referenceQuantity = refQty,
+                        referenceUnit = refUnit,
+                        carbsPerRef = carbsPerRef,
+                        proteinPerRef = proteinPerRef,
+                        fatPerRef = fatPerRef
+                    )
                 } else {
+                    val normalized = MacroUnits.toLegacyPer100g(refQty, refUnit, carbsPerRef, proteinPerRef, fatPerRef)
                     viewModel.updateMacroIngredient(
                         editing.copy(
                             name = name,
                             emoji = emoji,
-                            carbsPer100g = carbs,
-                            proteinPer100g = protein,
-                            fatPer100g = fat
+                            referenceQuantity = refQty,
+                            referenceUnit = refUnit,
+                            carbsPerRef = carbsPerRef,
+                            proteinPerRef = proteinPerRef,
+                            fatPerRef = fatPerRef,
+                            carbsPer100g = normalized.carbsG,
+                            proteinPer100g = normalized.proteinG,
+                            fatPer100g = normalized.fatG
                         )
                     )
                 }

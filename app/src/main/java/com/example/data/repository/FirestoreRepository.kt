@@ -15,6 +15,7 @@ import com.example.data.model.FamilyTask
 import com.example.data.model.FamilyUnit
 import com.example.data.model.MacroIngredient
 import com.example.data.model.MacroTargets
+import com.example.data.model.MacroUnits
 import com.example.data.model.MealPlan
 import com.example.data.model.PetFeedingStatus
 import com.example.data.model.ProductHistoryEntry
@@ -22,6 +23,11 @@ import com.example.data.model.Recipe
 import com.example.data.model.RecipeFormatters
 import com.example.data.model.ShoppingItem
 import com.example.data.model.UserProfile
+import com.example.data.model.effectiveCarbsPerRef
+import com.example.data.model.effectiveFatPerRef
+import com.example.data.model.effectiveProteinPerRef
+import com.example.data.model.effectiveRefQuantity
+import com.example.data.model.effectiveRefUnit
 import com.google.firebase.Firebase
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.auth
@@ -1177,14 +1183,17 @@ class FirestoreRepository(
         dayOfWeekIndex: Int,
         mealType: String,
         dishName: String,
-        recipeId: String?
+        recipeId: String?,
+        additionalDishName: String = "",
+        additionalRecipeId: String? = null
     ): Result<Unit> {
         val docId = "slot_${dayOfWeekIndex}_$mealType"
         val docRef = db.collection("families").document(familyId).collection("mealPlans").document(docId)
         return try {
             val uid = requireUserId()
             val trimmed = dishName.trim().take(120)
-            if (trimmed.isBlank()) {
+            val trimmedAdditional = additionalDishName.trim().take(120)
+            if (trimmed.isBlank() && trimmedAdditional.isBlank()) {
                 val existing = docRef.get().await()
                 if (existing.exists()) {
                     docRef.delete().await()
@@ -1196,13 +1205,19 @@ class FirestoreRepository(
                         "dayOfWeekIndex" to dayOfWeekIndex.coerceIn(0, 13),
                         "mealType" to mealType,
                         "dishName" to trimmed,
+                        "additionalDishName" to trimmedAdditional,
                         "notes" to "",
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
-                    if (!recipeId.isNullOrBlank()) {
+                    if (!recipeId.isNullOrBlank() && trimmed.isNotBlank()) {
                         updates["recipeId"] = recipeId
                     } else {
                         updates["recipeId"] = FieldValue.delete()
+                    }
+                    if (!additionalRecipeId.isNullOrBlank() && trimmedAdditional.isNotBlank()) {
+                        updates["additionalRecipeId"] = additionalRecipeId
+                    } else {
+                        updates["additionalRecipeId"] = FieldValue.delete()
                     }
                     docRef.update(updates).await()
                 } else {
@@ -1211,14 +1226,18 @@ class FirestoreRepository(
                         "dayOfWeekIndex" to dayOfWeekIndex.coerceIn(0, 13),
                         "mealType" to mealType,
                         "dishName" to trimmed,
+                        "additionalDishName" to trimmedAdditional,
                         "notes" to "",
                         "createdByUid" to uid,
                         "memberUids" to memberUids,
                         "createdAt" to FieldValue.serverTimestamp(),
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
-                    if (!recipeId.isNullOrBlank()) {
+                    if (!recipeId.isNullOrBlank() && trimmed.isNotBlank()) {
                         payload["recipeId"] = recipeId
+                    }
+                    if (!additionalRecipeId.isNullOrBlank() && trimmedAdditional.isNotBlank()) {
+                        payload["additionalRecipeId"] = additionalRecipeId
                     }
                     docRef.set(payload).await()
                 }
@@ -1735,9 +1754,14 @@ class FirestoreRepository(
                             "familyId" to familyId,
                             "name" to tpl.name.take(80),
                             "emoji" to tpl.emoji.take(16),
-                            "carbsPer100g" to tpl.carbsPer100g.coerceIn(0.0, 100.0),
-                            "proteinPer100g" to tpl.proteinPer100g.coerceIn(0.0, 100.0),
-                            "fatPer100g" to tpl.fatPer100g.coerceIn(0.0, 100.0),
+                            "carbsPer100g" to tpl.carbsPer100g.coerceIn(0.0, 5000.0),
+                            "proteinPer100g" to tpl.proteinPer100g.coerceIn(0.0, 5000.0),
+                            "fatPer100g" to tpl.fatPer100g.coerceIn(0.0, 5000.0),
+                            "referenceQuantity" to tpl.referenceQuantity.coerceIn(0.01, 10000.0),
+                            "referenceUnit" to tpl.referenceUnit.trim().ifBlank { "g" }.take(24),
+                            "carbsPerRef" to tpl.carbsPer100g.coerceIn(0.0, 5000.0),
+                            "proteinPerRef" to tpl.proteinPer100g.coerceIn(0.0, 5000.0),
+                            "fatPerRef" to tpl.fatPer100g.coerceIn(0.0, 5000.0),
                             "createdByUid" to uid,
                             "memberUids" to memberUids,
                             "createdAt" to FieldValue.serverTimestamp(),
@@ -1761,23 +1785,36 @@ class FirestoreRepository(
         memberUids: List<String>,
         name: String,
         emoji: String,
-        carbsPer100g: Double,
-        proteinPer100g: Double,
-        fatPer100g: Double
+        referenceQuantity: Double,
+        referenceUnit: String,
+        carbsPerRef: Double,
+        proteinPerRef: Double,
+        fatPerRef: Double
     ): Result<Unit> {
         val docRef = db.collection("families").document(familyId).collection("macroIngredients").document()
         return try {
             val uid = requireUserId()
             val cleanName = name.trim().take(80)
             require(cleanName.isNotBlank()) { "El nombre del ingrediente no puede estar vacío." }
+            val cleanQty = referenceQuantity.coerceIn(0.01, 10000.0)
+            val cleanUnit = MacroUnits.cleanUnit(referenceUnit)
+            val cRef = carbsPerRef.coerceIn(0.0, 5000.0)
+            val pRef = proteinPerRef.coerceIn(0.0, 5000.0)
+            val fRef = fatPerRef.coerceIn(0.0, 5000.0)
+            val normalized = MacroUnits.toLegacyPer100g(cleanQty, cleanUnit, cRef, pRef, fRef)
             docRef.set(
                 mapOf(
                     "familyId" to familyId,
                     "name" to cleanName,
                     "emoji" to emoji.trim().ifBlank { "🥗" }.take(16),
-                    "carbsPer100g" to carbsPer100g.coerceIn(0.0, 100.0),
-                    "proteinPer100g" to proteinPer100g.coerceIn(0.0, 100.0),
-                    "fatPer100g" to fatPer100g.coerceIn(0.0, 100.0),
+                    "carbsPer100g" to normalized.carbsG.coerceIn(0.0, 5000.0),
+                    "proteinPer100g" to normalized.proteinG.coerceIn(0.0, 5000.0),
+                    "fatPer100g" to normalized.fatG.coerceIn(0.0, 5000.0),
+                    "referenceQuantity" to cleanQty,
+                    "referenceUnit" to cleanUnit,
+                    "carbsPerRef" to cRef,
+                    "proteinPerRef" to pRef,
+                    "fatPerRef" to fRef,
                     "createdByUid" to uid,
                     "memberUids" to memberUids,
                     "createdAt" to FieldValue.serverTimestamp(),
@@ -1800,13 +1837,24 @@ class FirestoreRepository(
             require(ingredient.id.isNotBlank())
             val cleanName = ingredient.name.trim().take(80)
             require(cleanName.isNotBlank()) { "El nombre del ingrediente no puede estar vacío." }
+            val cleanQty = ingredient.effectiveRefQuantity.coerceIn(0.01, 10000.0)
+            val cleanUnit = ingredient.effectiveRefUnit
+            val cRef = ingredient.effectiveCarbsPerRef.coerceIn(0.0, 5000.0)
+            val pRef = ingredient.effectiveProteinPerRef.coerceIn(0.0, 5000.0)
+            val fRef = ingredient.effectiveFatPerRef.coerceIn(0.0, 5000.0)
+            val normalized = MacroUnits.toLegacyPer100g(cleanQty, cleanUnit, cRef, pRef, fRef)
             docRef.update(
                 mapOf(
                     "name" to cleanName,
                     "emoji" to ingredient.emoji.trim().ifBlank { "🥗" }.take(16),
-                    "carbsPer100g" to ingredient.carbsPer100g.coerceIn(0.0, 100.0),
-                    "proteinPer100g" to ingredient.proteinPer100g.coerceIn(0.0, 100.0),
-                    "fatPer100g" to ingredient.fatPer100g.coerceIn(0.0, 100.0),
+                    "carbsPer100g" to normalized.carbsG.coerceIn(0.0, 5000.0),
+                    "proteinPer100g" to normalized.proteinG.coerceIn(0.0, 5000.0),
+                    "fatPer100g" to normalized.fatG.coerceIn(0.0, 5000.0),
+                    "referenceQuantity" to cleanQty,
+                    "referenceUnit" to cleanUnit,
+                    "carbsPerRef" to cRef,
+                    "proteinPerRef" to pRef,
+                    "fatPerRef" to fRef,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             ).await()

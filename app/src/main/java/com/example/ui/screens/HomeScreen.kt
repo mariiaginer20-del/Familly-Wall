@@ -359,7 +359,15 @@ fun HomeScreen(
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         val mealTypes = MealType.plannerTypes
                         mealTypes.forEachIndexed { idx, mType ->
-                            val dish = todayMeals.firstOrNull { it.mealType == mType.name }?.dishName?.takeIf { it.isNotBlank() } ?: "Sin definir"
+                            val plan = todayMeals.firstOrNull { it.mealType == mType.name }
+                            val mainDish = plan?.dishName?.trim().orEmpty()
+                            val extraDish = plan?.additionalDishName?.trim().orEmpty()
+                            val dish = when {
+                                mainDish.isNotEmpty() && extraDish.isNotEmpty() -> "$mainDish · + $extraDish"
+                                mainDish.isNotEmpty() -> mainDish
+                                extraDish.isNotEmpty() -> "+ $extraDish"
+                                else -> "Sin definir"
+                            }
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()

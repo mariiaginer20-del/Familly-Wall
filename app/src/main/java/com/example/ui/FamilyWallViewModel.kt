@@ -72,7 +72,7 @@ data class ShoppingItemDraft(
     val name: String = "",
     val quantity: Double = 1.0,
     val unit: String = "ud",
-    val supermarket: Supermarket = Supermarket.MERCADONA,
+    val supermarket: Supermarket = Supermarket.CARREFOUR,
     val priority: ItemPriority = ItemPriority.NORMAL,
     val hasOffer: Boolean = false,
     val offerDetails: String = "",
@@ -954,11 +954,26 @@ class FamilyWallViewModel(
 
     // --- MEAL PLAN & RECIPE ACTIONS ---
 
-    fun updateMealPlanSlot(dayIndex: Int, mealType: MealType, dishName: String, recipeId: String? = null) {
+    fun updateMealPlanSlot(
+        dayIndex: Int,
+        mealType: MealType,
+        dishName: String,
+        recipeId: String? = null,
+        additionalDishName: String = "",
+        additionalRecipeId: String? = null
+    ) {
         val fam = currentFamily() ?: return
         viewModelScope.launch {
-            repository.upsertMealPlan(fam.id, fam.memberUids, dayIndex, mealType.name, dishName, recipeId)
-                .onFailure { emitMessage("No se pudo guardar el menú") }
+            repository.upsertMealPlan(
+                familyId = fam.id,
+                memberUids = fam.memberUids,
+                dayOfWeekIndex = dayIndex,
+                mealType = mealType.name,
+                dishName = dishName,
+                recipeId = recipeId,
+                additionalDishName = additionalDishName,
+                additionalRecipeId = additionalRecipeId
+            ).onFailure { emitMessage("No se pudo guardar el menú") }
         }
     }
 
@@ -1008,7 +1023,7 @@ class FamilyWallViewModel(
 
     fun addRecipeIngredientsToShopping(
         recipe: Recipe,
-        supermarket: Supermarket = Supermarket.MERCADONA,
+        supermarket: Supermarket = Supermarket.CARREFOUR,
         selectedIngredients: List<String>? = null
     ) {
         val fam = currentFamily() ?: return
@@ -1080,9 +1095,11 @@ class FamilyWallViewModel(
     fun addMacroIngredient(
         name: String,
         emoji: String,
-        carbsPer100g: Double,
-        proteinPer100g: Double,
-        fatPer100g: Double
+        referenceQuantity: Double,
+        referenceUnit: String,
+        carbsPerRef: Double,
+        proteinPerRef: Double,
+        fatPerRef: Double
     ) {
         val fam = currentFamily() ?: return
         viewModelScope.launch {
@@ -1091,9 +1108,11 @@ class FamilyWallViewModel(
                 memberUids = fam.memberUids,
                 name = name,
                 emoji = emoji,
-                carbsPer100g = carbsPer100g,
-                proteinPer100g = proteinPer100g,
-                fatPer100g = fatPer100g
+                referenceQuantity = referenceQuantity,
+                referenceUnit = referenceUnit,
+                carbsPerRef = carbsPerRef,
+                proteinPerRef = proteinPerRef,
+                fatPerRef = fatPerRef
             ).onSuccess {
                 emitMessage("Ingrediente '$name' añadido")
             }.onFailure {

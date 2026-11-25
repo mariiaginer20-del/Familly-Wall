@@ -49,6 +49,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.MacroIngredient
 import com.example.data.model.MacroTargets
+import com.example.data.model.MacroUnits
+import com.example.data.model.effectiveCarbsPerRef
+import com.example.data.model.effectiveFatPerRef
+import com.example.data.model.effectiveProteinPerRef
+import com.example.data.model.effectiveRefQuantity
+import com.example.data.model.effectiveRefUnit
 import kotlin.math.roundToInt
 
 private fun formatMacroInput(v: Double): String {
@@ -295,31 +301,57 @@ private fun MacroTargetGroupEditor(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MacroIngredientEditorDialog(
     initialIngredient: MacroIngredient? = null,
     initialName: String = "",
     onDismiss: () -> Unit,
-    onSave: (name: String, emoji: String, carbs: Double, protein: Double, fat: Double) -> Unit
+    onSave: (
+        name: String,
+        emoji: String,
+        referenceQuantity: Double,
+        referenceUnit: String,
+        carbsPerRef: Double,
+        proteinPerRef: Double,
+        fatPerRef: Double
+    ) -> Unit
 ) {
     var name by remember(initialIngredient, initialName) {
         mutableStateOf(initialIngredient?.name ?: initialName)
     }
+    var refQtyText by remember(initialIngredient) {
+        mutableStateOf(
+            if (initialIngredient != null) formatMacroInput(initialIngredient.effectiveRefQuantity)
+            else "100"
+        )
+    }
+    var refUnitText by remember(initialIngredient) {
+        mutableStateOf(initialIngredient?.effectiveRefUnit ?: "g")
+    }
     var carbs by remember(initialIngredient) {
-        mutableStateOf(if (initialIngredient != null) formatMacroInput(initialIngredient.carbsPer100g) else "0")
+        mutableStateOf(if (initialIngredient != null) formatMacroInput(initialIngredient.effectiveCarbsPerRef) else "0")
     }
     var protein by remember(initialIngredient) {
-        mutableStateOf(if (initialIngredient != null) formatMacroInput(initialIngredient.proteinPer100g) else "0")
+        mutableStateOf(if (initialIngredient != null) formatMacroInput(initialIngredient.effectiveProteinPerRef) else "0")
     }
     var fat by remember(initialIngredient) {
-        mutableStateOf(if (initialIngredient != null) formatMacroInput(initialIngredient.fatPer100g) else "0")
+        mutableStateOf(if (initialIngredient != null) formatMacroInput(initialIngredient.effectiveFatPerRef) else "0")
     }
 
     val preservedEmoji = initialIngredient?.emoji?.takeIf { it.isNotBlank() } ?: "•"
-    val cVal = parseMacroInput(carbs, 100.0)
-    val pVal = parseMacroInput(protein, 100.0)
-    val fVal = parseMacroInput(fat, 100.0)
-    val kcal100 = (cVal * 4.0 + pVal * 4.0 + fVal * 9.0).roundToInt()
+    val parsedRefQty = (refQtyText.trim().replace(',', '.').toDoubleOrNull() ?: 0.0).coerceAtMost(10000.0)
+    val cleanRefUnit = refUnitText.trim().take(24)
+    val displayRefQty = if (parsedRefQty > 0.0) com.example.data.model.MacroUnits.formatQuantityNumber(parsedRefQty) else "?"
+    val displayRefUnit = cleanRefUnit.ifBlank { "ud" }
+    val displayRefLabel = "$displayRefQty $displayRefUnit"
+
+    val cVal = parseMacroInput(carbs, 5000.0)
+    val pVal = parseMacroInput(protein, 5000.0)
+    val fVal = parseMacroInput(fat, 5000.0)
+    val kcalRef = (cVal * 4.0 + pVal * 4.0 + fVal * 9.0).roundToInt()
+
+    val isFormValid = name.isNotBlank() && parsedRefQty > 0.0 && cleanRefUnit.isNotBlank()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -341,18 +373,126 @@ fun MacroIngredientEditorDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(max = 480.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { if (it.length <= 80) name = it },
-                    label = { Text("Nombre del alimento (ej: Salmón, Avena)") },
+                    label = { Text("Nombre del alimento (ej: Salmón, Leche, Huevo)") },
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("macro_ingredient_name_input")
                 )
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Medida de referencia (ej: 100 g, 75 g, 1 L, 1 ud)",
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            com.example.data.model.MacroUnits.quickPresets.forEach { preset ->
+                                val isPresetActive = kotlin.math.abs(parsedRefQty - preset.quantity) < 0.001 &&
+                                    cleanRefUnit.equals(preset.unit, ignoreCase = true)
+                                Surface(
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = if (isPresetActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isPresetActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                                    ),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .clickable {
+                                            refQtyText = formatMacroInput(preset.quantity)
+                                            refUnitText = preset.unit
+                                        }
+                                        .testTag("macro_preset_${preset.label.replace(" ", "_")}")
+                                ) {
+                                    Text(
+                                        text = preset.label,
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = if (isPresetActive) FontWeight.Bold else FontWeight.Medium
+                                        ),
+                                        color = if (isPresetActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = refQtyText,
+                                onValueChange = { refQtyText = it },
+                                label = { Text("Cantidad", fontSize = 11.sp) },
+                                singleLine = true,
+                                isError = refQtyText.isNotBlank() && parsedRefQty <= 0.0,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                modifier = Modifier
+                                    .weight(0.42f)
+                                    .testTag("macro_ingredient_ref_qty_input")
+                            )
+                            OutlinedTextField(
+                                value = refUnitText,
+                                onValueChange = { if (it.length <= 24) refUnitText = it },
+                                label = { Text("Unidad (g, L, ud...)", fontSize = 11.sp) },
+                                singleLine = true,
+                                isError = refUnitText.isBlank(),
+                                modifier = Modifier
+                                    .weight(0.58f)
+                                    .testTag("macro_ingredient_ref_unit_input")
+                            )
+                        }
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            com.example.data.model.MacroUnits.quickUnits.forEach { unitOption ->
+                                val selected = cleanRefUnit.equals(unitOption, ignoreCase = true)
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                                    ),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { refUnitText = unitOption }
+                                        .testTag("macro_unit_chip_$unitOption")
+                                ) {
+                                    Text(
+                                        text = unitOption,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -360,12 +500,12 @@ fun MacroIngredientEditorDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Macros por cada 100 g",
+                        text = "Macros por cada $displayRefLabel",
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "$kcal100 kcal / 100g",
+                        text = "$kcalRef kcal / $displayRefLabel",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.primary
                     )
@@ -411,11 +551,19 @@ fun MacroIngredientEditorDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (name.isNotBlank()) {
-                        onSave(name.trim(), preservedEmoji, cVal, pVal, fVal)
+                    if (isFormValid) {
+                        onSave(
+                            name.trim(),
+                            preservedEmoji,
+                            parsedRefQty.coerceIn(0.01, 10000.0),
+                            cleanRefUnit,
+                            cVal,
+                            pVal,
+                            fVal
+                        )
                     }
                 },
-                enabled = name.isNotBlank(),
+                enabled = isFormValid,
                 modifier = Modifier.testTag("save_macro_ingredient_button")
             ) {
                 Text(if (initialIngredient == null) "Añadir" else "Guardar")
