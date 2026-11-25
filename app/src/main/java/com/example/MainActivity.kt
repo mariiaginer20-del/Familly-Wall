@@ -23,11 +23,13 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.outlined.Assignment
+import androidx.compose.material.icons.outlined.Calculate
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Restaurant
@@ -60,7 +62,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -89,6 +93,7 @@ import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.CalendarScreen
 import com.example.ui.screens.FamilySetupScreen
 import com.example.ui.screens.HomeScreen
+import com.example.ui.screens.MacrosScreen
 import com.example.ui.screens.MealsScreen
 import com.example.ui.screens.ShoppingScreen
 import com.example.ui.screens.TasksScreen
@@ -304,6 +309,7 @@ fun MainApp(
     val showAddTask by viewModel.showAddTaskDialog.collectAsStateWithLifecycle()
     val editingTask by viewModel.editingTask.collectAsStateWithLifecycle()
     val showAddRecipe by viewModel.showAddRecipeDialog.collectAsStateWithLifecycle()
+    val prefillRecipeDraft by viewModel.prefillRecipeDraft.collectAsStateWithLifecycle()
     val selectedDateMillis by viewModel.selectedCalendarDateMillis.collectAsStateWithLifecycle()
 
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -420,7 +426,11 @@ fun MainApp(
                         label = {
                             Text(
                                 "Muro",
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Clip,
                                 style = MaterialTheme.typography.labelMedium.copy(
+                                    fontSize = 10.sp,
                                     fontWeight = if (currentTab == MainTab.HOME) FontWeight.Bold else FontWeight.Medium
                                 )
                             )
@@ -452,7 +462,11 @@ fun MainApp(
                         label = {
                             Text(
                                 "Agenda",
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Clip,
                                 style = MaterialTheme.typography.labelMedium.copy(
+                                    fontSize = 10.sp,
                                     fontWeight = if (currentTab == MainTab.CALENDAR) FontWeight.Bold else FontWeight.Medium
                                 )
                             )
@@ -485,7 +499,11 @@ fun MainApp(
                         label = {
                             Text(
                                 "Tareas",
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Clip,
                                 style = MaterialTheme.typography.labelMedium.copy(
+                                    fontSize = 10.sp,
                                     fontWeight = if (currentTab == MainTab.TASKS) FontWeight.Bold else FontWeight.Medium
                                 )
                             )
@@ -518,7 +536,11 @@ fun MainApp(
                         label = {
                             Text(
                                 "Listas",
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Clip,
                                 style = MaterialTheme.typography.labelMedium.copy(
+                                    fontSize = 10.sp,
                                     fontWeight = if (currentTab == MainTab.SHOPPING) FontWeight.Bold else FontWeight.Medium
                                 )
                             )
@@ -539,12 +561,41 @@ fun MainApp(
                         label = {
                             Text(
                                 "Comidas",
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Clip,
                                 style = MaterialTheme.typography.labelMedium.copy(
+                                    fontSize = 10.sp,
                                     fontWeight = if (currentTab == MainTab.MEALS) FontWeight.Bold else FontWeight.Medium
                                 )
                             )
                         },
                         modifier = Modifier.testTag("nav_tab_meals")
+                    )
+
+                    NavigationBarItem(
+                        selected = currentTab == MainTab.MACROS,
+                        onClick = { viewModel.selectTab(MainTab.MACROS) },
+                        colors = navItemColors,
+                        icon = {
+                            Icon(
+                                if (currentTab == MainTab.MACROS) Icons.Filled.Calculate else Icons.Outlined.Calculate,
+                                contentDescription = "Macros"
+                            )
+                        },
+                        label = {
+                            Text(
+                                "Macros",
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Clip,
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontSize = 10.sp,
+                                    fontWeight = if (currentTab == MainTab.MACROS) FontWeight.Bold else FontWeight.Medium
+                                )
+                            )
+                        },
+                        modifier = Modifier.testTag("nav_tab_macros")
                     )
                 }
             }
@@ -570,6 +621,9 @@ fun MainApp(
                     viewModel = viewModel
                 )
                 MainTab.MEALS -> MealsScreen(
+                    viewModel = viewModel
+                )
+                MainTab.MACROS -> MacrosScreen(
                     viewModel = viewModel
                 )
             }
@@ -656,6 +710,7 @@ fun MainApp(
     if (showAddRecipe) {
         AddRecipeDialog(
             categories = allCategories.filter { it.scope == CategoryScope.RECIPE.name },
+            prefillDraft = prefillRecipeDraft,
             onManageCategories = { viewModel.openManageCategories(CategoryScope.RECIPE) },
             onDismiss = { viewModel.setShowAddRecipeDialog(false) },
             onSave = { draft ->

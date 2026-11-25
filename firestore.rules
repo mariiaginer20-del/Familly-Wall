@@ -214,6 +214,35 @@ service cloud.firestore {
              isValidUidList(data.memberUids);
     }
 
+    function isValidMacroTargets(data) {
+      return isValidId(data.familyId) &&
+             data.dailyCarbsG is number && data.dailyCarbsG >= 0 && data.dailyCarbsG <= 2000 &&
+             data.dailyProteinG is number && data.dailyProteinG >= 0 && data.dailyProteinG <= 1000 &&
+             data.dailyFatG is number && data.dailyFatG >= 0 && data.dailyFatG <= 1000 &&
+             data.breakfastCarbsG is number && data.breakfastCarbsG >= 0 && data.breakfastCarbsG <= 1000 &&
+             data.breakfastProteinG is number && data.breakfastProteinG >= 0 && data.breakfastProteinG <= 1000 &&
+             data.breakfastFatG is number && data.breakfastFatG >= 0 && data.breakfastFatG <= 1000 &&
+             data.lunchCarbsG is number && data.lunchCarbsG >= 0 && data.lunchCarbsG <= 1000 &&
+             data.lunchProteinG is number && data.lunchProteinG >= 0 && data.lunchProteinG <= 1000 &&
+             data.lunchFatG is number && data.lunchFatG >= 0 && data.lunchFatG <= 1000 &&
+             data.dinnerCarbsG is number && data.dinnerCarbsG >= 0 && data.dinnerCarbsG <= 1000 &&
+             data.dinnerProteinG is number && data.dinnerProteinG >= 0 && data.dinnerProteinG <= 1000 &&
+             data.dinnerFatG is number && data.dinnerFatG >= 0 && data.dinnerFatG <= 1000 &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isValidUidList(data.memberUids);
+    }
+
+    function isValidMacroIngredient(data) {
+      return isValidId(data.familyId) &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 80 &&
+             data.emoji is string && data.emoji.size() >= 1 && data.emoji.size() <= 16 &&
+             data.carbsPer100g is number && data.carbsPer100g >= 0 && data.carbsPer100g <= 100 &&
+             data.proteinPer100g is number && data.proteinPer100g >= 0 && data.proteinPer100g <= 100 &&
+             data.fatPer100g is number && data.fatPer100g >= 0 && data.fatPer100g <= 100 &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isValidUidList(data.memberUids);
+    }
+
     // --- COLLECTION RULES ---
 
     match /users/{userId} {
@@ -674,6 +703,72 @@ service cloud.firestore {
                          );
 
         allow delete: if isSignedIn() && isValidId(entryId) && isFamilyMemberDoc(familyId);
+      }
+
+      match /macroTargets/{targetId} {
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+        allow get: if isSignedIn() && isValidId(targetId) && (request.auth.uid in existing().memberUids || isFamilyMemberDoc(familyId));
+
+        allow create: if isSignedIn() &&
+                         isValidId(targetId) &&
+                         incoming().keys().hasAll(['familyId', 'dailyCarbsG', 'dailyProteinG', 'dailyFatG', 'breakfastCarbsG', 'breakfastProteinG', 'breakfastFatG', 'lunchCarbsG', 'lunchProteinG', 'lunchFatG', 'dinnerCarbsG', 'dinnerProteinG', 'dinnerFatG', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'dailyCarbsG', 'dailyProteinG', 'dailyFatG', 'breakfastCarbsG', 'breakfastProteinG', 'breakfastFatG', 'lunchCarbsG', 'lunchProteinG', 'lunchFatG', 'dinnerCarbsG', 'dinnerProteinG', 'dinnerFatG', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().familyId == familyId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidMacroTargets(incoming()) &&
+                         isFamilyMemberAfter(familyId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(targetId) &&
+                         isValidMacroTargets(incoming()) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isFamilyMemberDoc(familyId) && (
+                           (incoming().memberUids == existing().memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['dailyCarbsG', 'dailyProteinG', 'dailyFatG', 'breakfastCarbsG', 'breakfastProteinG', 'breakfastFatG', 'lunchCarbsG', 'lunchProteinG', 'lunchFatG', 'dinnerCarbsG', 'dinnerProteinG', 'dinnerFatG', 'updatedAt'])) ||
+                           (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(targetId) && isFamilyMemberDoc(familyId);
+      }
+
+      match /macroIngredients/{ingredientId} {
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+        allow get: if isSignedIn() && isValidId(ingredientId) && (request.auth.uid in existing().memberUids || isFamilyMemberDoc(familyId));
+
+        allow create: if isSignedIn() &&
+                         isValidId(ingredientId) &&
+                         incoming().keys().hasAll(['familyId', 'name', 'emoji', 'carbsPer100g', 'proteinPer100g', 'fatPer100g', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'name', 'emoji', 'carbsPer100g', 'proteinPer100g', 'fatPer100g', 'createdByUid', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().familyId == familyId &&
+                         incoming().createdByUid == request.auth.uid &&
+                         request.auth.uid in incoming().memberUids &&
+                         isValidTimestamp(incoming().createdAt) &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isValidMacroIngredient(incoming()) &&
+                         isFamilyMemberAfter(familyId);
+
+        allow update: if isSignedIn() &&
+                         isValidId(ingredientId) &&
+                         isValidMacroIngredient(incoming()) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isValidTimestamp(incoming().updatedAt) &&
+                         isFamilyMemberDoc(familyId) && (
+                           (incoming().memberUids == existing().memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'emoji', 'carbsPer100g', 'proteinPer100g', 'fatPer100g', 'updatedAt'])) ||
+                           (incoming().memberUids == get(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(ingredientId) && isFamilyMemberDoc(familyId);
       }
     }
   }

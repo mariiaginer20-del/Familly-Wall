@@ -1,7 +1,9 @@
 package com.example.ui.dialogs
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -19,10 +21,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
@@ -48,7 +53,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -117,6 +126,41 @@ fun AddCalendarEventDialog(
         )
     }
     var assignedMemberName by remember(initialEvent) { mutableStateOf(initialEvent?.assignedMemberName ?: "Todos") }
+    val initialColorHex = remember(initialEvent, members) {
+        initialEvent?.memberColorHex?.takeIf { it.isNotBlank() }
+            ?: members.firstOrNull { it.name == (initialEvent?.assignedMemberName ?: "Todos") }?.colorHex
+            ?: "#1B4D3E"
+    }
+    var selectedColorHex by remember(initialEvent) { mutableStateOf(initialColorHex) }
+    var hasCustomColor by remember(initialEvent) { mutableStateOf(initialEvent != null) }
+
+    val colorPalette = remember(members, initialEvent) {
+        val base = mutableListOf(
+            "#1B4D3E" to "Verde bosque",
+            "#C25934" to "Terracota",
+            "#2847D6" to "Azul cobalto",
+            "#0D9488" to "Turquesa",
+            "#D97706" to "Ámbar",
+            "#8B5CF6" to "Violeta",
+            "#DB2777" to "Rosa",
+            "#DC2626" to "Rojo coral",
+            "#157A4B" to "Esmeralda",
+            "#475569" to "Gris pizarra"
+        )
+        val extraHexes = buildList {
+            initialEvent?.memberColorHex?.takeIf { it.isNotBlank() }?.let { add(it to "Color actual") }
+            members.forEach { m ->
+                if (m.colorHex.isNotBlank()) add(m.colorHex to "Color de ${m.name}")
+            }
+        }
+        extraHexes.forEach { (hex, label) ->
+            if (base.none { it.first.equals(hex, ignoreCase = true) }) {
+                base.add(hex to label)
+            }
+        }
+        base.toList()
+    }
+
     var selectedCategory by remember(initialEvent, availableCategories) {
         mutableStateOf(
             initialEvent?.category?.takeIf { it.isNotBlank() }
@@ -371,7 +415,12 @@ fun AddCalendarEventDialog(
                             color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                             modifier = Modifier
                                 .clip(CircleShape)
-                                .clickable { assignedMemberName = name }
+                                .clickable {
+                                    assignedMemberName = name
+                                    if (!hasCustomColor) {
+                                        selectedColorHex = members.firstOrNull { it.name == name }?.colorHex ?: "#1B4D3E"
+                                    }
+                                }
                                 .testTag("event_member_$name")
                         ) {
                             Text(
@@ -381,6 +430,70 @@ fun AddCalendarEventDialog(
                                 color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Palette,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Color en el calendario",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    colorPalette.forEach { (hex, label) ->
+                        val swatchColor = runCatching {
+                            Color(android.graphics.Color.parseColor(hex))
+                        }.getOrDefault(MaterialTheme.colorScheme.primary)
+                        val isColorSelected = selectedColorHex.equals(hex, ignoreCase = true)
+                        val checkTint = if (swatchColor.luminance() > 0.5f) Color.Black else Color.White
+                        Box(
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .clip(CircleShape)
+                                .clickable {
+                                    selectedColorHex = hex
+                                    hasCustomColor = true
+                                }
+                                .semantics { contentDescription = "Color $label" }
+                                .testTag("event_color_$hex"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = swatchColor,
+                                border = if (isColorSelected) {
+                                    BorderStroke(2.5.dp, MaterialTheme.colorScheme.onSurface)
+                                } else {
+                                    BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                if (isColorSelected) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = checkTint,
+                                            modifier = Modifier.size(17.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -524,7 +637,6 @@ fun AddCalendarEventDialog(
             Button(
                 onClick = {
                     if (title.isNotBlank()) {
-                        val memberColor = members.firstOrNull { it.name == assignedMemberName }?.colorHex ?: "#1B4D3E"
                         val sortedReminders = selectedReminders.toList().sorted().ifEmpty { listOf(15) }
                         val finalEndMillis = if (hasRangeEnd && EventDateUtils.dayKey(endMillis) > EventDateUtils.dayKey(startMillis)) {
                             endMillis
@@ -543,7 +655,7 @@ fun AddCalendarEventDialog(
                                 startTime = startTime,
                                 endTime = endTime,
                                 assignedMemberName = assignedMemberName,
-                                memberColorHex = memberColor,
+                                memberColorHex = selectedColorHex,
                                 category = selectedCategory,
                                 reminderMinutesBefore = sortedReminders.first(),
                                 reminderMinutesList = sortedReminders

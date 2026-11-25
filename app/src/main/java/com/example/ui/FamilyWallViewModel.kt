@@ -12,6 +12,8 @@ import com.example.data.model.FamilyMember
 import com.example.data.model.FamilyTask
 import com.example.data.model.FamilyUnit
 import com.example.data.model.ItemPriority
+import com.example.data.model.MacroIngredient
+import com.example.data.model.MacroTargets
 import com.example.data.model.MealPlan
 import com.example.data.model.MealType
 import com.example.data.model.PetFeedingStatus
@@ -55,7 +57,8 @@ enum class MainTab(val title: String) {
     CALENDAR("Agenda"),
     TASKS("Tareas"),
     SHOPPING("Listas"),
-    MEALS("Comidas")
+    MEALS("Comidas"),
+    MACROS("Macros")
 }
 
 sealed interface UiState<out T> {
@@ -214,6 +217,7 @@ class FamilyWallViewModel(
 
     private var lastSyncedSignature: String? = null
     private var lastCategorySeededFamilyId: String? = null
+    private var lastMacroSeededFamilyId: String? = null
 
     init {
         viewModelScope.launch {
@@ -227,6 +231,14 @@ class FamilyWallViewModel(
                 if (family.id != lastCategorySeededFamilyId && family.memberUids.isNotEmpty()) {
                     lastCategorySeededFamilyId = family.id
                     repository.seedDefaultCategoriesIfNeeded(
+                        familyId = family.id,
+                        memberUids = family.memberUids,
+                        onlyIfCompletelyEmpty = true
+                    )
+                }
+                if (family.id != lastMacroSeededFamilyId && family.memberUids.isNotEmpty()) {
+                    lastMacroSeededFamilyId = family.id
+                    repository.seedDefaultMacroIngredientsIfNeeded(
                         familyId = family.id,
                         memberUids = family.memberUids,
                         onlyIfCompletelyEmpty = true
@@ -359,7 +371,16 @@ class FamilyWallViewModel(
 
     private val _showAddRecipeDialog = MutableStateFlow(false)
     val showAddRecipeDialog: StateFlow<Boolean> = _showAddRecipeDialog.asStateFlow()
-    fun setShowAddRecipeDialog(show: Boolean) { _showAddRecipeDialog.value = show }
+    private val _prefillRecipeDraft = MutableStateFlow<RecipeDraft?>(null)
+    val prefillRecipeDraft: StateFlow<RecipeDraft?> = _prefillRecipeDraft.asStateFlow()
+    fun setShowAddRecipeDialog(show: Boolean) {
+        _showAddRecipeDialog.value = show
+        if (!show) _prefillRecipeDraft.value = null
+    }
+    fun openSaveMacroRecipeDialog(draft: RecipeDraft) {
+        _prefillRecipeDraft.value = draft
+        _showAddRecipeDialog.value = true
+    }
 
     private val _selectedCalendarDateMillis = MutableStateFlow(System.currentTimeMillis())
     val selectedCalendarDateMillis: StateFlow<Long> = _selectedCalendarDateMillis.asStateFlow()
@@ -451,6 +472,16 @@ class FamilyWallViewModel(
 
     val allRecipes: StateFlow<List<Recipe>> =
         observeFamilySubcollection("recetas") { repository.observeRecipes(it) }
+
+    val macroTargets: StateFlow<MacroTargets> =
+        observeFamilySubcollection("objetivos de macros") { repository.observeMacroTargets(it) }
+            .map { list -> list.firstOrNull { it.id == "default" } ?: list.firstOrNull() ?: MacroTargets() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), MacroTargets())
+
+    val macroIngredients: StateFlow<List<MacroIngredient>> =
+        observeFamilySubcollection("ingredientes de macros") { repository.observeMacroIngredients(it) }
+            .map { list -> list.sortedBy { it.name.lowercase() } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS), emptyList())
 
     private fun currentFamily(): FamilyUnit? = (familyUnitState.value as? UiState.Success)?.data
     private fun currentMemberDisplayName(): String {
@@ -909,6 +940,75 @@ class FamilyWallViewModel(
                 )
             }.onFailure {
                 emitMessage("No se pudo actualizar la comida de Oliva")
+            }
+        }
+    }
+
+    // --- MACROS (TARGETS & INGREDIENTS) ---
+
+    fun saveMacroTargets(targets: MacroTargets) {
+        val fam = currentFamily() ?: return
+        viewModelScope.launch {
+            repository.saveMacroTargets(fam.id, fam.memberUids, targets)
+                .onSuccess { emitMessage("Objetivos de macros guardados") }
+                .onFailure { emitMessage("No se pudieron guardar los objetivos") }
+        }
+    }
+
+    fun addMacroIngredient(
+        name: String,
+        emoji: String,
+        carbsPer100g: Double,
+        proteinPer100g: Double,
+        fatPer100g: Double
+    ) {
+        val fam = currentFamily() ?: return
+        viewModelScope.launch {
+            repository.addMacroIngredient(
+                familyId = fam.id,
+                memberUids = fam.memberUids,
+                name = name,
+                emoji = emoji,
+                carbsPer100g = carbsPer100g,
+                proteinPer100g = proteinPer100g,
+                fatPer100g = fatPer100g
+            ).onSuccess {
+                emitMessage("Ingrediente '$name' añadido")
+            }.onFailure {
+                emitMessage("No se pudo añadir el ingrediente")
+            }
+        }
+    }
+
+    fun updateMacroIngredient(ingredient: MacroIngredient) {
+        val fam = currentFamily() ?: return
+        viewModelScope.launch {
+            repository.updateMacroIngredient(fam.id, ingredient)
+                .onSuccess { emitMessage("'${ingredient.name}' actualizado") }
+                .onFailure { emitMessage("No se pudo actualizar el ingrediente") }
+        }
+    }
+
+    fun deleteMacroIngredient(ingredient: MacroIngredient) {
+        val fam = currentFamily() ?: return
+        viewModelScope.launch {
+            repository.deleteMacroIngredient(fam.id, ingredient.id)
+                .onSuccess { emitMessage("Ingrediente eliminado") }
+                .onFailure { emitMessage("No se pudo eliminar el ingrediente") }
+        }
+    }
+
+    fun restoreDefaultMacroIngredients() {
+        val fam = currentFamily() ?: return
+        viewModelScope.launch {
+            repository.seedDefaultMacroIngredientsIfNeeded(
+                familyId = fam.id,
+                memberUids = fam.memberUids,
+                onlyIfCompletelyEmpty = false
+            ).onSuccess {
+                emitMessage("Ingredientes base restaurados")
+            }.onFailure {
+                emitMessage("No se pudieron restaurar los ingredientes")
             }
         }
     }

@@ -7,10 +7,13 @@ import com.example.data.model.CategoryScope
 import com.example.data.model.CustomList
 import com.example.data.model.CustomListItem
 import com.example.data.model.DefaultCategories
+import com.example.data.model.DefaultMacroIngredients
 import com.example.data.model.FamilyCategory
 import com.example.data.model.FamilyMember
 import com.example.data.model.FamilyTask
 import com.example.data.model.FamilyUnit
+import com.example.data.model.MacroIngredient
+import com.example.data.model.MacroTargets
 import com.example.data.model.MealPlan
 import com.example.data.model.PetFeedingStatus
 import com.example.data.model.ProductHistoryEntry
@@ -498,7 +501,9 @@ class FirestoreRepository(
             "recipes",
             "categories",
             "productHistory",
-            "petCare"
+            "petCare",
+            "macroTargets",
+            "macroIngredients"
         )
         try {
             val refsToUpdate = mutableListOf<DocumentReference>()
@@ -1600,6 +1605,217 @@ class FirestoreRepository(
             throw e
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.WRITE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
+    // --- MACROS (TARGETS & INGREDIENTS) ---
+
+    fun observeMacroTargets(familyId: String): Flow<List<MacroTargets>> =
+        observeCollection(familyId, "macroTargets", MacroTargets::class.java)
+
+    suspend fun saveMacroTargets(
+        familyId: String,
+        memberUids: List<String>,
+        targets: MacroTargets
+    ): Result<Unit> {
+        val docRef = db.collection("families").document(familyId).collection("macroTargets").document("default")
+        return try {
+            val uid = requireUserId()
+            val dC = targets.dailyCarbsG.coerceIn(0.0, 2000.0)
+            val dP = targets.dailyProteinG.coerceIn(0.0, 1000.0)
+            val dF = targets.dailyFatG.coerceIn(0.0, 1000.0)
+            val bC = targets.breakfastCarbsG.coerceIn(0.0, 1000.0)
+            val bP = targets.breakfastProteinG.coerceIn(0.0, 1000.0)
+            val bF = targets.breakfastFatG.coerceIn(0.0, 1000.0)
+            val lC = targets.lunchCarbsG.coerceIn(0.0, 1000.0)
+            val lP = targets.lunchProteinG.coerceIn(0.0, 1000.0)
+            val lF = targets.lunchFatG.coerceIn(0.0, 1000.0)
+            val nC = targets.dinnerCarbsG.coerceIn(0.0, 1000.0)
+            val nP = targets.dinnerProteinG.coerceIn(0.0, 1000.0)
+            val nF = targets.dinnerFatG.coerceIn(0.0, 1000.0)
+
+            val snap = docRef.get().await()
+            if (snap.exists()) {
+                docRef.update(
+                    mapOf(
+                        "dailyCarbsG" to dC,
+                        "dailyProteinG" to dP,
+                        "dailyFatG" to dF,
+                        "breakfastCarbsG" to bC,
+                        "breakfastProteinG" to bP,
+                        "breakfastFatG" to bF,
+                        "lunchCarbsG" to lC,
+                        "lunchProteinG" to lP,
+                        "lunchFatG" to lF,
+                        "dinnerCarbsG" to nC,
+                        "dinnerProteinG" to nP,
+                        "dinnerFatG" to nF,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } else {
+                docRef.set(
+                    mapOf(
+                        "familyId" to familyId,
+                        "dailyCarbsG" to dC,
+                        "dailyProteinG" to dP,
+                        "dailyFatG" to dF,
+                        "breakfastCarbsG" to bC,
+                        "breakfastProteinG" to bP,
+                        "breakfastFatG" to bF,
+                        "lunchCarbsG" to lC,
+                        "lunchProteinG" to lP,
+                        "lunchFatG" to lF,
+                        "dinnerCarbsG" to nC,
+                        "dinnerProteinG" to nP,
+                        "dinnerFatG" to nF,
+                        "createdByUid" to uid,
+                        "memberUids" to memberUids,
+                        "createdAt" to FieldValue.serverTimestamp(),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
+    fun observeMacroIngredients(familyId: String): Flow<List<MacroIngredient>> =
+        observeCollection(familyId, "macroIngredients", MacroIngredient::class.java)
+
+    suspend fun seedDefaultMacroIngredientsIfNeeded(
+        familyId: String,
+        memberUids: List<String>,
+        onlyIfCompletelyEmpty: Boolean
+    ): Result<Unit> {
+        val colRef = db.collection("families").document(familyId).collection("macroIngredients")
+        return try {
+            val uid = requireUserId()
+            val snap = colRef.whereArrayContains("memberUids", uid).get().await()
+            if (onlyIfCompletelyEmpty && !snap.isEmpty) {
+                return Result.success(Unit)
+            }
+            val existingIds = snap.documents.map { it.id }.toSet()
+            val existingNames = snap.documents.map {
+                it.getString("name").orEmpty().trim().lowercase()
+            }.toSet()
+
+            val toSeed = DefaultMacroIngredients.all.filter { tpl ->
+                val docId = "seed_${tpl.idSuffix}"
+                docId !in existingIds && tpl.name.lowercase() !in existingNames
+            }
+            if (toSeed.isEmpty()) return Result.success(Unit)
+
+            toSeed.chunked(400).forEach { chunk ->
+                val batch = db.batch()
+                chunk.forEach { tpl ->
+                    val ref = colRef.document("seed_${tpl.idSuffix}")
+                    batch.set(
+                        ref,
+                        mapOf(
+                            "familyId" to familyId,
+                            "name" to tpl.name.take(80),
+                            "emoji" to tpl.emoji.take(16),
+                            "carbsPer100g" to tpl.carbsPer100g.coerceIn(0.0, 100.0),
+                            "proteinPer100g" to tpl.proteinPer100g.coerceIn(0.0, 100.0),
+                            "fatPer100g" to tpl.fatPer100g.coerceIn(0.0, 100.0),
+                            "createdByUid" to uid,
+                            "memberUids" to memberUids,
+                            "createdAt" to FieldValue.serverTimestamp(),
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    )
+                }
+                batch.commit().await()
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, "families/$familyId/macroIngredients")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun addMacroIngredient(
+        familyId: String,
+        memberUids: List<String>,
+        name: String,
+        emoji: String,
+        carbsPer100g: Double,
+        proteinPer100g: Double,
+        fatPer100g: Double
+    ): Result<Unit> {
+        val docRef = db.collection("families").document(familyId).collection("macroIngredients").document()
+        return try {
+            val uid = requireUserId()
+            val cleanName = name.trim().take(80)
+            require(cleanName.isNotBlank()) { "El nombre del ingrediente no puede estar vacío." }
+            docRef.set(
+                mapOf(
+                    "familyId" to familyId,
+                    "name" to cleanName,
+                    "emoji" to emoji.trim().ifBlank { "🥗" }.take(16),
+                    "carbsPer100g" to carbsPer100g.coerceIn(0.0, 100.0),
+                    "proteinPer100g" to proteinPer100g.coerceIn(0.0, 100.0),
+                    "fatPer100g" to fatPer100g.coerceIn(0.0, 100.0),
+                    "createdByUid" to uid,
+                    "memberUids" to memberUids,
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateMacroIngredient(familyId: String, ingredient: MacroIngredient): Result<Unit> {
+        val docRef = db.collection("families").document(familyId).collection("macroIngredients").document(ingredient.id)
+        return try {
+            requireUserId()
+            require(ingredient.id.isNotBlank())
+            val cleanName = ingredient.name.trim().take(80)
+            require(cleanName.isNotBlank()) { "El nombre del ingrediente no puede estar vacío." }
+            docRef.update(
+                mapOf(
+                    "name" to cleanName,
+                    "emoji" to ingredient.emoji.trim().ifBlank { "🥗" }.take(16),
+                    "carbsPer100g" to ingredient.carbsPer100g.coerceIn(0.0, 100.0),
+                    "proteinPer100g" to ingredient.proteinPer100g.coerceIn(0.0, 100.0),
+                    "fatPer100g" to ingredient.fatPer100g.coerceIn(0.0, 100.0),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteMacroIngredient(familyId: String, ingredientId: String): Result<Unit> {
+        val docRef = db.collection("families").document(familyId).collection("macroIngredients").document(ingredientId)
+        return try {
+            requireUserId()
+            docRef.delete().await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.DELETE, docRef.path)
             Result.failure(e)
         }
     }

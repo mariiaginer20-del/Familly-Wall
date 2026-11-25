@@ -8,11 +8,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -38,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.FamilyMember
@@ -67,11 +73,14 @@ fun FamilyHeader(
         modifier = modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+            )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 20.dp, end = 8.dp, top = 10.dp, bottom = 6.dp),
+                .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -108,7 +117,8 @@ fun FamilyHeader(
                     text = familyName.ifBlank { "Family Wall" },
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.onBackground,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
@@ -116,7 +126,7 @@ fun FamilyHeader(
                 IconButton(
                     onClick = onToggleStyleQuick,
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .testTag("quick_switch_style_button")
                 ) {
                     Icon(
@@ -129,7 +139,7 @@ fun FamilyHeader(
                 IconButton(
                     onClick = onToggleDarkModeQuick,
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .testTag("quick_dark_mode_button")
                 ) {
                     Icon(
@@ -142,7 +152,7 @@ fun FamilyHeader(
                 IconButton(
                     onClick = onOpenSettings,
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .testTag("family_settings_button")
                 ) {
                     Icon(
@@ -155,7 +165,7 @@ fun FamilyHeader(
                 IconButton(
                     onClick = onNotificationClick,
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(48.dp)
                         .testTag("notification_bell_button")
                 ) {
                     BadgedBox(

@@ -260,6 +260,49 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["familyId", "petName", "dateKey", "fed", "fedByMemberName", "fedTimeLabel", "createdByUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "MacroTargets": {
+      "title": "MacroTargets",
+      "description": "Predefined daily and per-meal (Desayuno, Comida, Cena) carbohydrate, protein, and fat targets in grams.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "dailyCarbsG": { "type": "number" },
+        "dailyProteinG": { "type": "number" },
+        "dailyFatG": { "type": "number" },
+        "breakfastCarbsG": { "type": "number" },
+        "breakfastProteinG": { "type": "number" },
+        "breakfastFatG": { "type": "number" },
+        "lunchCarbsG": { "type": "number" },
+        "lunchProteinG": { "type": "number" },
+        "lunchFatG": { "type": "number" },
+        "dinnerCarbsG": { "type": "number" },
+        "dinnerProteinG": { "type": "number" },
+        "dinnerFatG": { "type": "number" },
+        "createdByUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "dailyCarbsG", "dailyProteinG", "dailyFatG", "breakfastCarbsG", "breakfastProteinG", "breakfastFatG", "lunchCarbsG", "lunchProteinG", "lunchFatG", "dinnerCarbsG", "dinnerProteinG", "dinnerFatG", "createdByUid", "memberUids", "createdAt", "updatedAt"]
+    },
+    "MacroIngredient": {
+      "title": "MacroIngredient",
+      "description": "Ingredient nutritional macro profile per 100g for automatic meal gram calculation.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "name": { "type": "string" },
+        "emoji": { "type": "string" },
+        "carbsPer100g": { "type": "number" },
+        "proteinPer100g": { "type": "number" },
+        "fatPer100g": { "type": "number" },
+        "createdByUid": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "name", "emoji", "carbsPer100g", "proteinPer100g", "fatPer100g", "createdByUid", "memberUids", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
@@ -318,6 +361,14 @@
     "/families/{familyId}/petCare/{entryId}": {
       "schema": { "$ref": "#/entities/PetFeedingStatus" },
       "description": "Daily pet feeding check status synced across family members."
+    },
+    "/families/{familyId}/macroTargets/{targetId}": {
+      "schema": { "$ref": "#/entities/MacroTargets" },
+      "description": "Daily and per-meal macro gram targets."
+    },
+    "/families/{familyId}/macroIngredients/{ingredientId}": {
+      "schema": { "$ref": "#/entities/MacroIngredient" },
+      "description": "Customizable ingredients with carbs, protein, and fat per 100g."
     }
   }
 }

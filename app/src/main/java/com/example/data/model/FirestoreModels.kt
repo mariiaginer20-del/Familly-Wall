@@ -228,3 +228,42 @@ data class PetFeedingStatus(
     @ServerTimestamp val createdAt: Timestamp? = null,
     @ServerTimestamp val updatedAt: Timestamp? = null
 )
+
+@Keep
+@IgnoreExtraProperties
+data class MacroTargets(
+    @DocumentId val id: String = "",
+    val familyId: String = "",
+    val dailyCarbsG: Double = 220.0,
+    val dailyProteinG: Double = 140.0,
+    val dailyFatG: Double = 65.0,
+    val breakfastCarbsG: Double = 60.0,
+    val breakfastProteinG: Double = 35.0,
+    val breakfastFatG: Double = 18.0,
+    val lunchCarbsG: Double = 90.0,
+    val lunchProteinG: Double = 55.0,
+    val lunchFatG: Double = 25.0,
+    val dinnerCarbsG: Double = 70.0,
+    val dinnerProteinG: Double = 50.0,
+    val dinnerFatG: Double = 22.0,
+    val createdByUid: String = "",
+    val memberUids: List<String> = emptyList(),
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)
+
+@Keep
+@IgnoreExtraProperties
+data class MacroIngredient(
+    @DocumentId val id: String = "",
+    val familyId: String = "",
+    val name: String = "",
+    val emoji: String = "🥗",
+    val carbsPer100g: Double = 0.0,
+    val proteinPer100g: Double = 0.0,
+    val fatPer100g: Double = 0.0,
+    val createdByUid: String = "",
+    val memberUids: List<String> = emptyList(),
+    @ServerTimestamp val createdAt: Timestamp? = null,
+    @ServerTimestamp val updatedAt: Timestamp? = null
+)

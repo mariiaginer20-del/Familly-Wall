@@ -61,6 +61,7 @@ import com.example.ui.RecipeDraft
 fun AddRecipeDialog(
     categories: List<FamilyCategory>,
     initialRecipe: Recipe? = null,
+    prefillDraft: RecipeDraft? = null,
     onManageCategories: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (RecipeDraft) -> Unit
@@ -69,32 +70,43 @@ fun AddRecipeDialog(
         categories.ifEmpty { DefaultCategories.forScope(CategoryScope.RECIPE) }
     }
 
-    var title by remember(initialRecipe) { mutableStateOf(initialRecipe?.title ?: "") }
-    var category by remember(initialRecipe, availableCategories) {
+    var title by remember(initialRecipe, prefillDraft) {
+        mutableStateOf(initialRecipe?.title ?: prefillDraft?.title ?: "")
+    }
+    var category by remember(initialRecipe, prefillDraft, availableCategories) {
         mutableStateOf(
             initialRecipe?.category?.takeIf { it.isNotBlank() }
+                ?: prefillDraft?.category?.takeIf { it.isNotBlank() }
                 ?: availableCategories.firstOrNull()?.name
                 ?: "Plato principal"
         )
     }
-    var prepTimeMinutes by remember(initialRecipe) { mutableStateOf((initialRecipe?.prepTimeMinutes ?: 30).toString()) }
-    var servings by remember(initialRecipe) { mutableStateOf((initialRecipe?.servings ?: 4).toString()) }
-    var selectedEmoji by remember(initialRecipe) { mutableStateOf(initialRecipe?.emoji ?: "🍳") }
+    var prepTimeMinutes by remember(initialRecipe, prefillDraft) {
+        mutableStateOf((initialRecipe?.prepTimeMinutes ?: prefillDraft?.prepTimeMinutes ?: 30).toString())
+    }
+    var servings by remember(initialRecipe, prefillDraft) {
+        mutableStateOf((initialRecipe?.servings ?: prefillDraft?.servings ?: 4).toString())
+    }
+    var selectedEmoji by remember(initialRecipe, prefillDraft) {
+        mutableStateOf(initialRecipe?.emoji ?: prefillDraft?.emoji ?: "🍳")
+    }
 
-    val ingredientRows = remember(initialRecipe) {
+    val rawIngredients = initialRecipe?.ingredients ?: prefillDraft?.ingredients.orEmpty()
+    val ingredientRows = remember(initialRecipe, prefillDraft) {
         mutableStateListOf<RecipeIngredient>().apply {
-            if (initialRecipe != null && initialRecipe.ingredients.isNotBlank()) {
-                addAll(RecipeFormatters.parseIngredients(initialRecipe.ingredients))
+            if (rawIngredients.isNotBlank()) {
+                addAll(RecipeFormatters.parseIngredients(rawIngredients))
             } else {
                 add(RecipeIngredient())
             }
         }
     }
 
-    val stepRows = remember(initialRecipe) {
+    val rawInstructions = initialRecipe?.instructions ?: prefillDraft?.instructions.orEmpty()
+    val stepRows = remember(initialRecipe, prefillDraft) {
         mutableStateListOf<String>().apply {
-            if (initialRecipe != null && initialRecipe.instructions.isNotBlank()) {
-                addAll(RecipeFormatters.parseSteps(initialRecipe.instructions))
+            if (rawInstructions.isNotBlank()) {
+                addAll(RecipeFormatters.parseSteps(rawInstructions))
             } else {
                 add("")
             }

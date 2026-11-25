@@ -479,4 +479,67 @@ test("Shopping items, tasks, custom lists, calendar events, meal plans, recipes 
       updatedAt: past(),
     })
   );
+
+  // 6. MacroTargets & MacroIngredients CRUD, validation, and outsider denial
+  const macroTargetRef = aliceDb.collection("families").doc("fam_1").collection("macroTargets").doc("default");
+  await assertSucceeds(
+    macroTargetRef.set({
+      familyId: "fam_1",
+      dailyCarbsG: 220,
+      dailyProteinG: 140,
+      dailyFatG: 65,
+      breakfastCarbsG: 60,
+      breakfastProteinG: 35,
+      breakfastFatG: 18,
+      lunchCarbsG: 90,
+      lunchProteinG: 55,
+      lunchFatG: 25,
+      dinnerCarbsG: 70,
+      dinnerProteinG: 50,
+      dinnerFatG: 22,
+      createdByUid: ALICE_UID,
+      memberUids: [ALICE_UID],
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await assertSucceeds(
+    macroTargetRef.update({
+      lunchProteinG: 60,
+      updatedAt: past(),
+    })
+  );
+  await assertSucceeds(
+    aliceDb.collection("families").doc("fam_1").collection("macroTargets").where("memberUids", "array-contains", ALICE_UID).get()
+  );
+  await assertFails(macroTargetRef.update({ dailyCarbsG: -10, updatedAt: past() }));
+  await assertFails(eveDb.collection("families").doc("fam_1").collection("macroTargets").doc("default").get());
+
+  const macroIngRef = aliceDb.collection("families").doc("fam_1").collection("macroIngredients").doc("ing_salmon");
+  await assertSucceeds(
+    macroIngRef.set({
+      familyId: "fam_1",
+      name: "Salmón fresco",
+      emoji: "🐟",
+      carbsPer100g: 0,
+      proteinPer100g: 20,
+      fatPer100g: 13,
+      createdByUid: ALICE_UID,
+      memberUids: [ALICE_UID],
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+  await assertSucceeds(
+    macroIngRef.update({
+      fatPer100g: 12.5,
+      updatedAt: past(),
+    })
+  );
+  await assertSucceeds(
+    aliceDb.collection("families").doc("fam_1").collection("macroIngredients").where("memberUids", "array-contains", ALICE_UID).get()
+  );
+  await assertFails(macroIngRef.update({ proteinPer100g: 120, updatedAt: past() }));
+  await assertFails(eveDb.collection("families").doc("fam_1").collection("macroIngredients").doc("ing_salmon").delete());
+  await assertSucceeds(macroIngRef.delete());
 });

@@ -327,7 +327,7 @@ fun CalendarScreen(
                                             Box(
                                                 modifier = Modifier
                                                     .weight(1f)
-                                                    .height(44.dp)
+                                                    .height(48.dp)
                                             )
                                         } else {
                                             val k = EventDateUtils.dayKey(cellMillis)
@@ -339,7 +339,7 @@ fun CalendarScreen(
                                             Box(
                                                 modifier = Modifier
                                                     .weight(1f)
-                                                    .height(44.dp)
+                                                    .height(48.dp)
                                                     .clip(cellShape)
                                                     .background(
                                                         when {
@@ -379,20 +379,38 @@ fun CalendarScreen(
                                                     )
                                                     if (dayEvents.isNotEmpty()) {
                                                         Spacer(modifier = Modifier.height(2.dp))
-                                                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                                            dayEvents.take(3).forEach { ev ->
-                                                                val dotColor = if (isSelected) {
-                                                                    MaterialTheme.colorScheme.onPrimary
-                                                                } else {
-                                                                    runCatching {
-                                                                        Color(android.graphics.Color.parseColor(ev.memberColorHex))
-                                                                    }.getOrDefault(MaterialTheme.colorScheme.secondary)
-                                                                }
+                                                        val hasOverflow = dayEvents.size > 5
+                                                        val visibleDotEvents = if (hasOverflow) dayEvents.take(4) else dayEvents
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                                            modifier = if (isSelected) {
+                                                                Modifier
+                                                                    .clip(RoundedCornerShape(50))
+                                                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
+                                                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                                                            } else {
+                                                                Modifier
+                                                            }
+                                                        ) {
+                                                            visibleDotEvents.forEach { ev ->
+                                                                val dotColor = runCatching {
+                                                                    Color(android.graphics.Color.parseColor(ev.memberColorHex))
+                                                                }.getOrDefault(MaterialTheme.colorScheme.secondary)
                                                                 Box(
                                                                     modifier = Modifier
                                                                         .size(5.dp)
                                                                         .clip(CircleShape)
                                                                         .background(dotColor)
+                                                                )
+                                                            }
+                                                            if (hasOverflow) {
+                                                                Text(
+                                                                    text = "+",
+                                                                    fontSize = 8.sp,
+                                                                    lineHeight = 8.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = MaterialTheme.colorScheme.onSurface
                                                                 )
                                                             }
                                                         }
